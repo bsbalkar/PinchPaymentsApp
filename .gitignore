@@ -1,1 +1,128 @@
-*.env
+# ============================================
+# Node.js / JavaScript
+# ============================================
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ============================================
+# Environment variables (Secrets)
+# ============================================
+
+.env
+.env.*
+!.env.example
+
+# ============================================
+# Database files (SQLite)
+# ============================================
+
+database/*.db
+database/*.db-journal
+database/*.db-wal
+database/*.db-shm
+
+# ============================================
+# Generated Receipts (PDFs)
+# ============================================
+
+receipts/*.pdf
+receipts/*.png
+receipts/*.jpg
+!receipts/.gitkeep
+
+# ============================================
+# Logs
+# ============================================
+
+logs/
+*.log
+*.log.*
+
+# ============================================
+# OS files
+# ============================================
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ============================================
+# IDE / Editor files
+# ============================================
+
+# VS Code
+.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IntelliJ / WebStorm
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# Temporary files
+# ============================================
+
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ============================================
+# Build outputs
+# ============================================
+
+dist/
+build/
+*.tsbuildinfo
+
+# ============================================
+# Testing
+# ============================================
+
+coverage/
+.nyc_output/
+test-results/
+
+# ============================================
+# Deployment
+# ============================================
+
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================
+# Misc
+# ============================================
+
+*.bak
+*.backup
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

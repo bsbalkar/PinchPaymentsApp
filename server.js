@@ -8,179 +8,145 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const db = require('./database/db');
-const { createWebhook, getWebhooks, getTokenStatus } = require('./services/pinch');
-
-// Import webhook handler correctly
-const webhookRoutes = require('./routes/webhooks');
-const { handlePaymentCreated } = webhookRoutes;
+const Stripe = require('stripe');
 
 // ----- Initialize Express app -----
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// ----- Import after app initialization -----
+const db = require('./database/db');
+const webhookRoutes = require('./routes/webhooks');
+const { handlePaymentCreated } = webhookRoutes;
+
+// ----- Initialize Stripe -----
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
 // ----- Middleware -----
 app.use(cors());
 app.use(express.json());
 
-// ----- Serve static files (receipts) -----
+// ----- Direct HTML Routes -----
+app.get('/demo.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'demo.html'));
+});
+app.get('/eftpos.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'eftpos.html'));
+});
+app.get('/demo', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'demo.html'));
+});
+app.get('/eftpos', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'eftpos.html'));
+});
+
+// ----- Static Files -----
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ----- Receipts Directory -----
 const receiptsDir = path.join(__dirname, 'receipts');
 if (!fs.existsSync(receiptsDir)) {
     fs.mkdirSync(receiptsDir, { recursive: true });
 }
 app.use('/receipts', express.static(receiptsDir));
 
-// ----- Routes -----
+// ============================================================
+// ROUTES
+// ============================================================
 
-// Home route - API status
+// ----- Home -----
 app.get('/', (req, res) => {
     res.json({
         name: 'Pinch Receipt App',
         status: 'running',
-        version: '1.0.0',
+        version: '2.0.0',
         endpoints: [
             'GET / — API status',
-            'GET /receipts — List all receipts (JSON)',
-            'GET /receipts/dashboard — View receipts dashboard',
-            'GET /receipts/:paymentId — Get receipt by payment ID',
-            'GET /receipts/view/:filename — View PDF in browser',
-            'POST /webhooks/pinch — Pinch webhook endpoint',
-            'GET /stats — Dashboard stats',
-            'POST /test-payment — Simulate a test payment'
+            'GET /receipts/dashboard — Dashboard',
+            'GET /receipts — All receipts (JSON)',
+            'GET /stats — Stats',
+            'POST /test-payment — Test payment',
+            'POST /webhooks/pinch — Pinch webhook',
+            'GET /stripe/invoice/:invoiceId — Fetch Stripe invoice',
+            'POST /eftpos-generate — Generate QR invoice',
+            'POST /process-stripe-invoice — Process invoice to receipt',
+            'GET /demo.html — Customer app',
+            'GET /eftpos.html — EFTPOS simulator'
         ]
     });
 });
 
-// ----- Get all receipts (JSON) -----
+// ----- Get all receipts -----
 app.get('/receipts', async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 50;
         const receipts = await db.getAllReceipts(limit);
-        res.json({
-            success: true,
-            count: receipts.length,
-            receipts
-        });
+        res.json({ success: true, count: receipts.length, receipts });
     } catch (error) {
-        console.error('❌ Error fetching receipts:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// ----- View a specific receipt PDF -----
+// ----- View PDF -----
 app.get('/receipts/view/:filename', (req, res) => {
-    const filename = req.params.filename;
-    const filePath = path.join(receiptsDir, filename);
-    
+    const filePath = path.join(receiptsDir, req.params.filename);
     if (!fs.existsSync(filePath)) {
         return res.status(404).send('Receipt not found');
     }
-    
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${req.params.filename}"`);
     res.sendFile(filePath);
 });
 
-// ----- Receipts dashboard (HTML view) -----
+// ----- Dashboard -----
 app.get('/receipts/dashboard', async (req, res) => {
     try {
         const receipts = await db.getAllReceipts(50);
-        
-        let html = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Pinch Receipts</title>
-                <style>
-                    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
-                    h1 { color: #1a237e; }
-                    .stats { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                    .stats span { margin-right: 30px; }
-                    .stats .number { font-weight: bold; font-size: 20px; color: #1a237e; }
-                    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-                    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
-                    th { background: #1a237e; color: white; font-weight: 600; }
-                    tr:hover { background: #f8f9ff; }
-                    .view-link { color: #1a237e; text-decoration: none; font-weight: 500; }
-                    .view-link:hover { text-decoration: underline; }
-                    .status-pending { color: #ff9800; }
-                    .status-generated { color: #4caf50; }
-                    .status-sent { color: #2196f3; }
-                    .status-failed { color: #f44336; }
-                    .empty { text-align: center; color: #999; padding: 40px; }
-                    .refresh { margin-top: 20px; color: #666; font-size: 14px; }
-                    code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
-                </style>
-            </head>
-            <body>
-                <h1>🧾 Pinch Receipts</h1>
-                <div class="stats">
-                    <span>📊 <strong>Total:</strong> <span class="number">${receipts.length}</span></span>
-                    <span>⏳ <strong>Pending:</strong> <span class="number">${receipts.filter(r => r.status === 'pending').length}</span></span>
-                    <span>✅ <strong>Generated:</strong> <span class="number">${receipts.filter(r => r.status === 'generated').length}</span></span>
-                    <span>📤 <strong>Sent:</strong> <span class="number">${receipts.filter(r => r.status === 'sent').length}</span></span>
-                </div>
-        `;
+        let html = `<!DOCTYPE html>
+<html><head><title>Pinch Receipts</title>
+<style>
+body { font-family: Arial; max-width: 900px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+h1 { color: #1a237e; }
+.stats { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+.stats span { margin-right: 30px; }
+.stats .number { font-weight: bold; font-size: 20px; color: #1a237e; }
+table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
+th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+th { background: #1a237e; color: white; }
+tr:hover { background: #f8f9ff; }
+.view-link { color: #1a237e; text-decoration: none; font-weight: 500; }
+.view-link:hover { text-decoration: underline; }
+.status-pending { color: #ff9800; }
+.status-generated { color: #4caf50; }
+.empty { text-align: center; color: #999; padding: 40px; }
+</style></head><body>
+<h1>🧾 Pinch Receipts</h1>
+<div class="stats">
+<span>📊 <strong>Total:</strong> <span class="number">${receipts.length}</span></span>
+<span>⏳ <strong>Pending:</strong> <span class="number">${receipts.filter(r => r.status === 'pending').length}</span></span>
+<span>✅ <strong>Generated:</strong> <span class="number">${receipts.filter(r => r.status === 'generated').length}</span></span>
+</div>`;
 
         if (receipts.length === 0) {
-            html += `
-                <div class="empty">
-                    <p>No receipts found. Process a test payment first:</p>
-                    <code>curl -X POST http://localhost:${PORT}/test-payment \\</code><br>
-                    <code>  -H "Content-Type: application/json" \\</code><br>
-                    <code>  -d '{"email":"test@example.com","firstName":"John","lastName":"Doe","amount":2500,"reference":"INV-001"}'</code>
-                </div>
-            `;
+            html += `<div class="empty"><p>No receipts found.</p></div>`;
         } else {
-            html += `
-                <table>
-                    <tr>
-                        <th>Payment ID</th>
-                        <th>Customer</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Receipt</th>
-                    </tr>
-            `;
-
+            html += `<table><tr><th>Payment ID</th><th>Customer</th><th>Amount</th><th>Status</th><th>Receipt</th></tr>`;
             receipts.forEach(receipt => {
                 const hasPdf = receipt.pdf_path && fs.existsSync(receipt.pdf_path);
                 const filename = receipt.pdf_path ? path.basename(receipt.pdf_path) : null;
-                
-                html += `
-                    <tr>
-                        <td><code>${receipt.pinch_payment_id}</code></td>
-                        <td>${receipt.customer_name || 'Unknown'}<br><small style="color:#999;">${receipt.customer_email}</small></td>
-                        <td><strong>$${(receipt.amount / 100).toFixed(2)}</strong></td>
-                        <td class="status-${receipt.status}">${receipt.status}</td>
-                        <td>
-                            ${hasPdf ? 
-                                `<a href="/receipts/view/${filename}" target="_blank" class="view-link">📄 View PDF</a>` : 
-                                `<span style="color:#999;">⏳ Generating...</span>`
-                            }
-                        </td>
-                    </tr>
-                `;
+                html += `<tr>
+                    <td><code>${receipt.pinch_payment_id}</code></td>
+                    <td>${receipt.customer_name || 'Unknown'}</td>
+                    <td><strong>$${(receipt.amount / 100).toFixed(2)}</strong></td>
+                    <td class="status-${receipt.status}">${receipt.status}</td>
+                    <td>${hasPdf ? `<a href="/receipts/view/${filename}" target="_blank" class="view-link">📄 View PDF</a>` : '⏳ Generating...'}</td>
+                </tr>`;
             });
-
-            html += `
-                </table>
-            `;
+            html += `</table>`;
         }
-
-        html += `
-                <div class="refresh">
-                    <p>🔄 Refresh page to see new receipts</p>
-                    <p style="font-size:12px;color:#999;">PDFs are stored in /receipts folder</p>
-                </div>
-            </body>
-            </html>
-        `;
-
+        html += `</body></html>`;
         res.send(html);
-
     } catch (error) {
-        console.error('❌ Error loading dashboard:', error);
         res.status(500).send('Error loading dashboard');
     }
 });
@@ -189,55 +155,175 @@ app.get('/receipts/dashboard', async (req, res) => {
 app.get('/receipts/:paymentId', async (req, res) => {
     try {
         const receipt = await db.getReceiptByPaymentId(req.params.paymentId);
-        if (!receipt) {
-            return res.status(404).json({ error: 'Receipt not found' });
-        }
+        if (!receipt) return res.status(404).json({ error: 'Receipt not found' });
         res.json({ success: true, receipt });
     } catch (error) {
-        console.error('❌ Error fetching receipt:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// ----- Get stats -----
+// ----- Stats -----
 app.get('/stats', async (req, res) => {
     try {
         const stats = await db.getStats();
         res.json({ success: true, stats });
     } catch (error) {
-        console.error('❌ Error fetching stats:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// ----- Test endpoint: Simulate a payment -----
-app.post('/test-payment', async (req, res) => {
+// ============================================================
+// STRIPE ROUTES
+// ============================================================
+
+// ----- Fetch Stripe invoice -----
+app.get('/stripe/invoice/:invoiceId', async (req, res) => {
     try {
-        const { email, firstName, lastName, amount, reference } = req.body;
+        const invoiceId = req.params.invoiceId;
+        const invoice = await stripe.invoices.retrieve(invoiceId);
+        const lineItems = await stripe.invoices.listLineItems(invoiceId, { limit: 100 });
+        res.json({ success: true, invoice_id: invoiceId, invoice, line_items: lineItems.data });
+    } catch (error) {
+        res.status(404).json({ success: false, error: error.message || 'Invoice not found' });
+    }
+});
 
-        const testData = {
-            id: `pmt_test_${Date.now()}`,
-            payerId: `pyr_test_${Date.now()}`,
-            amount: amount || 1000,
-            currency: 'AUD',
-            reference: reference || `TEST-INV-${Date.now()}`,
-            payer: {
-                emailAddress: email || 'test@example.com',
-                firstName: firstName || 'Test',
-                lastName: lastName || 'User'
-            }
-        };
+// ----- Process Stripe invoice to receipt -----
+app.post('/process-stripe-invoice', async (req, res) => {
+    try {
+        const result = await handlePaymentCreated(req.body);
+        res.json({ success: true, message: 'Receipt generated', result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
-        console.log('🔄 Test payment received:', testData);
+// ============================================================
+// EFTPOS - GENERATE QR ONLY (No Payment)
+// ============================================================
 
-        const result = await handlePaymentCreated(testData);
+app.post('/eftpos-generate', async (req, res) => {
+    try {
+        const { storeName, storeEmail, staffName, staffPhone, invoiceNumber, reference, items, subtotal, gstAmount, total, gstRate } = req.body;
+
+        console.log('📄 QR Generation:', storeName, invoiceNumber, total / 100);
+
+        // Create customer
+        const customer = await stripe.customers.create({
+            email: storeEmail || 'store@example.com',
+            name: storeName || 'Store',
+            metadata: { staff_name: staffName || 'N/A', staff_phone: staffPhone || 'N/A' }
+        });
+
+        // Create invoice items
+        for (const item of items) {
+            await stripe.invoiceItems.create({
+                customer: customer.id,
+                amount: item.amount * (item.quantity || 1),
+                currency: 'aud',
+                description: `${item.description} - ${item.quantity || 1}x @ $${(item.amount / 100).toFixed(2)}`
+            });
+        }
+
+        // Create and finalize invoice
+        const invoice = await stripe.invoices.create({
+            customer: customer.id,
+            currency: 'aud',
+            collection_method: 'send_invoice',
+            days_until_due: 30,
+            metadata: { store_name: storeName, staff_name: staffName, invoice_number: invoiceNumber, reference, gst_rate: gstRate || 10 }
+        });
+
+        const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
 
         res.json({
             success: true,
-            message: 'Test payment processed',
-            data: testData,
-            result: result,
-            receipt_url: `http://localhost:${PORT}/receipts/dashboard`
+            invoice_id: finalizedInvoice.id,
+            invoice_number: finalizedInvoice.number || invoiceNumber,
+            total: finalizedInvoice.total,
+            currency: finalizedInvoice.currency,
+            customer_id: customer.id
+        });
+
+    } catch (error) {
+        console.error('❌ QR generation failed:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================================
+// TEST PAYMENT
+// ============================================================
+
+app.post('/test-payment', async (req, res) => {
+    try {
+        const { email, firstName, lastName, amount, reference, items } = req.body;
+
+        let customer;
+        const customers = await stripe.customers.list({ email: email || 'test@example.com', limit: 1 });
+        if (customers.data.length > 0) {
+            customer = customers.data[0];
+        } else {
+            customer = await stripe.customers.create({
+                email: email || 'test@example.com',
+                name: `${firstName || 'Test'} ${lastName || 'User'}`.trim()
+            });
+        }
+
+        const invoiceItems = items || [
+            { description: 'Hammer', amount: 2500, quantity: 1 },
+            { description: 'Paint', amount: 1000, quantity: 2 },
+            { description: 'Tape', amount: 500, quantity: 1 }
+        ];
+
+        for (const item of invoiceItems) {
+            await stripe.invoiceItems.create({
+                customer: customer.id,
+                amount: item.amount * (item.quantity || 1),
+                currency: 'aud',
+                description: `${item.description} - ${item.quantity || 1}x @ $${(item.amount / 100).toFixed(2)}`
+            });
+        }
+
+        const invoice = await stripe.invoices.create({
+            customer: customer.id,
+            currency: 'aud',
+            collection_method: 'send_invoice',
+            days_until_due: 30,
+            metadata: { reference: reference || `DEMO-${Date.now()}` }
+        });
+
+        const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+        const lineItems = await stripe.invoices.listLineItems(finalizedInvoice.id, { limit: 100 });
+
+        // Generate receipt text
+        let receiptText = `STORE RECEIPT\nInvoice: ${finalizedInvoice.number || 'N/A'}\nDate: ${new Date().toLocaleString()}\n\nItems:\n`;
+        lineItems.data.forEach(item => {
+            receiptText += `  ${item.description || 'Item'} - $${(item.amount / 100).toFixed(2)}\n`;
+        });
+        receiptText += `\nTotal: $${(finalizedInvoice.total / 100).toFixed(2)}`;
+
+        const receiptData = {
+            id: finalizedInvoice.id,
+            payerId: customer.id,
+            amount: finalizedInvoice.total,
+            currency: finalizedInvoice.currency,
+            reference: reference || finalizedInvoice.number,
+            payer: { emailAddress: customer.email, firstName: customer.name?.split(' ')[0] || 'Test', lastName: customer.name?.split(' ')[1] || 'User' },
+            receipt_text: receiptText,
+            stripe_invoice: finalizedInvoice,
+            line_items: lineItems.data
+        };
+
+        const result = await handlePaymentCreated(receiptData);
+
+        res.json({
+            success: true,
+            message: 'Payment processed',
+            data: receiptData,
+            result,
+            invoice_url: `/stripe/invoice/${finalizedInvoice.id}`,
+            receipt_url: '/receipts/dashboard'
         });
 
     } catch (error) {
@@ -246,72 +332,34 @@ app.post('/test-payment', async (req, res) => {
     }
 });
 
-// ----- Webhook routes -----
+// ============================================================
+// WEBHOOKS
+// ============================================================
+
 app.use('/webhooks', webhookRoutes);
 
-// ----- Error handling middleware -----
+// ============================================================
+// ERROR HANDLING
+// ============================================================
+
 app.use((err, req, res, next) => {
-    console.error('❌ Unhandled error:', err);
-    res.status(500).json({
-        success: false,
-        error: err.message || 'Internal server error'
-    });
+    console.error('❌ Error:', err);
+    res.status(500).json({ success: false, error: err.message });
 });
 
-// ----- Setup webhook on startup -----
-async function setupWebhook() {
-    try {
-        console.log('🔧 Setting up webhook...');
-        
-        // Check if webhook exists
-        const webhooks = await getWebhooks();
-        
-        // Use ngrok URL or webhook.site for testing
-        const publicUrl = process.env.PUBLIC_URL || 'https://webhook.site/your-id';
-        
-        // Look for existing webhook
-        const existingWebhook = webhooks.data?.find(w => w.uri === publicUrl);
-        
-        if (existingWebhook) {
-            console.log(`✅ Webhook already exists: ${existingWebhook.id}`);
-            return;
-        }
-        
-        // Create new webhook
-        const newWebhook = await createWebhook(
-            publicUrl,
-            ['payment-created', 'payment.succeeded']
-        );
-        
-        console.log(`✅ Webhook created: ${newWebhook.id}`);
-        if (newWebhook.secret) {
-            console.log(`🔑 Webhook Secret: ${newWebhook.secret}`);
-            console.log('💡 Add this to your .env as WEBHOOK_SECRET');
-        }
-        
-    } catch (error) {
-        console.error('❌ Webhook setup failed:', error.message);
-        console.log('💡 You can set up webhook manually in the Pinch dashboard');
-        console.log('💡 Or test with: POST /test-payment');
-    }
-}
+// ============================================================
+// START SERVER
+// ============================================================
 
-// ----- Start server -----
 app.listen(PORT, () => {
     console.log(`
 ╔══════════════════════════════════════════════╗
-║         PINCH RECEIPT APP                    ║
+║         PINCH RECEIPT APP v2.0              ║
 ╠══════════════════════════════════════════════╣
-║   🚀 Server running on http://localhost:${PORT}  ║
-║   📊 Dashboard: http://localhost:${PORT}/receipts/dashboard   ║
-║   📈 Stats: http://localhost:${PORT}/stats          ║
-║   📄 Receipts: http://localhost:${PORT}/receipts           ║
-╠══════════════════════════════════════════════╣
-║   🧪 Test: POST /test-payment               ║
-║   📨 Webhook: POST /webhooks/pinch          ║
-║                                              ║
-║   ✅ Email service REMOVED                   ║
-║   📄 PDFs displayed in browser               ║
+║   🚀 Server: http://localhost:${PORT}           ║
+║   📊 Dashboard: /receipts/dashboard         ║
+║   📱 EFTPOS: /eftpos.html                   ║
+║   🧾 Customer: /demo.html                   ║
 ╚══════════════════════════════════════════════╝
     `);
 });

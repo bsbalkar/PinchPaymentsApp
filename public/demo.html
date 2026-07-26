@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pinch Receipt - Customer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #f5f7fa;
+            padding: 16px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .app {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .header h1 { font-size: 20px; color: #1a237e; }
+        .badge {
+            background: #e3f2fd;
+            color: #0d47a1;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .step {
+            border: 1px solid #e8e8e8;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+        }
+        .step.active { border-color: #1a237e; background: #f8f9ff; }
+        .step.completed { border-color: #4caf50; background: #f0f8f0; }
+        .step.error { border-color: #f44336; background: #fff5f5; }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .step-number {
+            background: #e0e0e0;
+            color: #666;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .step.active .step-number { background: #1a237e; color: white; }
+        .step.completed .step-number { background: #4caf50; color: white; }
+        .step.error .step-number { background: #f44336; color: white; }
+
+        .step-title { font-weight: 600; font-size: 14px; flex: 1; margin-left: 10px; }
+        .step-status { font-size: 12px; }
+        .step-status.loading { color: #ff9800; animation: pulse 1s infinite; }
+        .step-status.done { color: #4caf50; }
+        .step-status.fail { color: #f44336; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .step-content {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #e0e0e0;
+            display: none;
+        }
+        .step.active .step-content,
+        .step.completed .step-content,
+        .step.error .step-content { display: block; }
+
+        .label { font-size: 11px; color: #666; margin-bottom: 4px; font-weight: 500; }
+        .value { font-size: 14px; color: #1a1a1a; }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+        input[type="text"]:focus { outline: none; border-color: #1a237e; }
+
+        .btn {
+            background: #1a237e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+        .btn:hover { background: #0d1555; }
+        .btn:disabled { background: #999; cursor: not-allowed; }
+        .btn-success { background: #4caf50; }
+        .btn-success:hover { background: #388e3c; }
+        .btn-outline { background: transparent; color: #1a237e; border: 2px solid #1a237e; }
+        .btn-outline:hover { background: #1a237e; color: white; }
+
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .two-col .qr-box {
+            text-align: center;
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100px;
+        }
+        .qr-box .icon { font-size: 36px; }
+        .qr-box .hint { font-size: 11px; color: #999; margin-top: 4px; }
+
+        .data-box {
+            background: #f5f7fa;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
+
+        .invoice-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        .invoice-total {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-top: 2px solid #333;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a2e;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            border: 1px solid #333;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+        }
+        .toast.show { display: block; }
+        .toast.success { border-color: #4caf50; }
+        .toast.error { border-color: #e94560; }
+
+        .mt-8 { margin-top: 8px; }
+        .mt-12 { margin-top: 12px; }
+        .mb-8 { margin-bottom: 8px; }
+        .text-sm { font-size: 13px; color: #666; }
+        .text-center { text-align: center; }
+        .flex { display: flex; gap: 8px; flex-wrap: wrap; }
+        .flex-center { align-items: center; justify-content: center; }
+
+        .badge-green { background: #e8f5e9; color: #2e7d32; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .badge-orange { background: #fff3e0; color: #e65100; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <div class="header">
+        <h1>🧾 Pinch Receipt</h1>
+        <span class="badge">Customer</span>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- STEP 1: SCAN QR -->
+    <!-- ========================================== -->
+    <div class="step active" id="step1">
+        <div class="step-header">
+            <span class="step-number">1</span>
+            <span class="step-title">📱 Scan QR</span>
+            <span class="step-status" id="step1-status">⏳ Ready</span>
+        </div>
+        <div class="step-content">
+            <p class="text-sm">Scan the QR code from the EFTPOS device</p>
+
+            <div class="two-col">
+                <div>
+                    <div class="label">Invoice ID</div>
+                    <input type="text" id="invoiceIdInput" placeholder="e.g., in_xxx">
+                    <button class="btn" id="fetchBtn">🔍 Fetch Invoice</button>
+                </div>
+                <div class="qr-box">
+                    <div class="icon">📷</div>
+                    <div class="hint">Tap to scan QR</div>
+                    <button class="btn btn-outline" id="scanBtn" style="font-size:12px;padding:6px 12px;width:auto;">📸 Scan</button>
+                </div>
+            </div>
+
+            <div id="scanResult" class="hidden mt-12">
+                <div class="badge-green">✅ QR Scanned</div>
+                <div class="data-box" id="scanData"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- STEP 2: INVOICE DETAILS -->
+    <!-- ========================================== -->
+    <div class="step" id="step2">
+        <div class="step-header">
+            <span class="step-number">2</span>
+            <span class="step-title">📋 Invoice</span>
+            <span class="step-status" id="step2-status">⏳ Waiting</span>
+        </div>
+        <div class="step-content">
+            <p class="text-sm">Invoice details from the store</p>
+            <div id="invoiceContent" class="hidden">
+                <div id="invoiceItems"></div>
+                <button class="btn btn-success mt-12" id="payBtn">💳 Pay Now</button>
+            </div>
+            <div id="invoiceWaiting">
+                <p class="text-sm" style="color:#999;">⏳ Scan a QR code first...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- STEP 3: PAYMENT RESULT -->
+    <!-- ========================================== -->
+    <div class="step" id="step3">
+        <div class="step-header">
+            <span class="step-number">3</span>
+            <span class="step-title">💳 Payment</span>
+            <span class="step-status" id="step3-status">⏳ Waiting</span>
+        </div>
+        <div class="step-content">
+            <div id="paymentContent" class="hidden">
+                <div class="badge-green">✅ Payment Successful</div>
+                <div class="data-box" id="paymentData"></div>
+                <button class="btn btn-success mt-12" id="receiptBtn">📄 Generate Receipt</button>
+            </div>
+            <div id="paymentWaiting">
+                <p class="text-sm" style="color:#999;">⏳ Complete payment first...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- STEP 4: RECEIPT -->
+    <!-- ========================================== -->
+    <div class="step" id="step4">
+        <div class="step-header">
+            <span class="step-number">4</span>
+            <span class="step-title">📄 Receipt</span>
+            <span class="step-status" id="step4-status">⏳ Waiting</span>
+        </div>
+        <div class="step-content">
+            <div id="receiptContent" class="hidden">
+                <div class="receipt-preview" id="receiptText" style="background:#f5f7fa;padding:12px;border-radius:8px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:300px;overflow-y:auto;"></div>
+                <button class="btn mt-12" id="viewReceiptBtn">📄 View Full PDF</button>
+            </div>
+            <div id="receiptWaiting">
+                <p class="text-sm" style="color:#999;">⏳ Generate receipt first...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+    // ============================================================
+    // STATE
+    // ============================================================
+    const state = {
+        invoiceId: null,
+        invoiceData: null,
+        paymentId: null,
+        receiptData: null,
+        pdfUrl: null
+    };
+
+    const $ = id => document.getElementById(id);
+    const BASE_URL = window.location.origin;
+
+    // ============================================================
+    // TOAST
+    // ============================================================
+    let toastTimeout;
+
+    function showToast(msg, type = '') {
+        const t = $('toast');
+        t.textContent = msg;
+        t.className = 'toast show ' + type;
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => { t.className = 'toast'; }, 4000);
+    }
+
+    // ============================================================
+    // STEP UPDATES
+    // ============================================================
+    function updateStep(stepId, status, type) {
+        const statusEl = document.getElementById(`${stepId}-status`);
+        const stepEl = document.getElementById(stepId);
+        if (statusEl) {
+            statusEl.textContent = status;
+            statusEl.className = 'step-status';
+            if (type === 'loading') statusEl.classList.add('loading');
+            if (type === 'done') statusEl.classList.add('done');
+            if (type === 'error') statusEl.classList.add('fail');
+        }
+        if (stepEl) {
+            stepEl.className = 'step';
+            if (type === 'loading') stepEl.classList.add('active');
+            if (type === 'done') stepEl.classList.add('completed');
+            if (type === 'error') stepEl.classList.add('error');
+            if (type === 'ready') stepEl.classList.add('active');
+        }
+    }
+
+    // ============================================================
+    // STEP 1: SCAN QR / FETCH INVOICE
+    // ============================================================
+
+    // ----- Fetch Invoice -----
+    $('fetchBtn').addEventListener('click', async () => {
+        const invoiceId = $('invoiceIdInput').value.trim();
+        if (!invoiceId) {
+            showToast('Please enter an Invoice ID', 'error');
+            return;
+        }
+        await fetchInvoice(invoiceId);
+    });
+
+    $('invoiceIdInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') $('fetchBtn').click();
+    });
+
+    // ----- Scan QR (Mobile) -----
+    $('scanBtn').addEventListener('click', () => {
+        // Mobile QR scanner fallback
+        if ('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices) {
+            // For production, use a proper QR library
+            showToast('📷 Please use a QR scanning app to scan the code', '');
+            // Simple fallback: paste invoice ID
+            const pasted = prompt('📷 Scan the QR code and paste the Invoice ID:');
+            if (pasted && pasted.trim()) {
+                $('invoiceIdInput').value = pasted.trim();
+                $('fetchBtn').click();
+            }
+        } else {
+            // Desktop fallback
+            const manual = prompt('📷 Enter the Invoice ID from the QR code:');
+            if (manual && manual.trim()) {
+                $('invoiceIdInput').value = manual.trim();
+                $('fetchBtn').click();
+            }
+        }
+    });
+
+    // ----- Fetch Invoice from Stripe -----
+    async function fetchInvoice(invoiceId) {
+        updateStep('step1', '⏳ Fetching...', 'loading');
+
+        try {
+            const response = await fetch(`${BASE_URL}/stripe/invoice/${invoiceId}`);
+            const data = await response.json();
+
+            if (!data.success) throw new Error(data.error || 'Invoice not found');
+
+            state.invoiceId = invoiceId;
+            state.invoiceData = data;
+
+            // Show scan result
+            $('scanResult').classList.remove('hidden');
+            $('scanData').textContent = JSON.stringify({
+                invoice_id: invoiceId,
+                total: (data.invoice.total / 100).toFixed(2),
+                currency: data.invoice.currency?.toUpperCase()
+            }, null, 2);
+
+            // Display invoice details
+            displayInvoice(data);
+
+            updateStep('step1', '✅ Invoice Found', 'done');
+            updateStep('step2', '📋 Ready', 'ready');
+            $('invoiceWaiting').classList.add('hidden');
+            $('invoiceContent').classList.remove('hidden');
+
+            showToast('✅ Invoice found! Review and pay.', 'success');
+
+        } catch (error) {
+            updateStep('step1', '❌ Failed', 'error');
+            showToast('❌ ' + error.message, 'error');
+        }
+    }
+
+    // ============================================================
+    // STEP 2: DISPLAY INVOICE
+    // ============================================================
+    function displayInvoice(data) {
+        const invoice = data.invoice;
+        const lineItems = data.line_items || [];
+
+        let itemsHtml = lineItems.map(item => `
+            <div class="invoice-item">
+                <span>${item.description || 'Item'} × ${item.quantity || 1}</span>
+                <span>$${(item.amount / 100).toFixed(2)}</span>
+            </div>
+        `).join('');
+
+        const total = (invoice.total / 100).toFixed(2);
+        const currency = invoice.currency?.toUpperCase() || 'AUD';
+
+        $('invoiceItems').innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
+                    <div style="font-size:10px;color:#666;">Invoice #</div>
+                    <div style="font-weight:600;font-size:14px;">${invoice.number || 'N/A'}</div>
+                </div>
+                <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
+                    <div style="font-size:10px;color:#666;">Total</div>
+                    <div style="font-weight:700;font-size:16px;color:#1a237e;">${currency} $${total}</div>
+                </div>
+                <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
+                    <div style="font-size:10px;color:#666;">Store</div>
+                    <div style="font-weight:600;font-size:13px;">${invoice.metadata?.store_name || 'Store'}</div>
+                </div>
+                <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
+                    <div style="font-size:10px;color:#666;">Status</div>
+                    <div><span class="badge-orange">${invoice.status || 'open'}</span></div>
+                </div>
+            </div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px;">📦 Items</div>
+            ${itemsHtml || '<p style="color:#999;font-size:13px;">No items</p>'}
+            <div class="invoice-total">
+                <span>Total</span>
+                <span>${currency} $${total}</span>
+            </div>
+        `;
+    }
+
+    // ============================================================
+    // STEP 3: PAY NOW
+    // ============================================================
+    $('payBtn').addEventListener('click', async () => {
+        if (!state.invoiceData) {
+            showToast('Please fetch an invoice first', 'error');
+            return;
+        }
+
+        const btn = $('payBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Processing...';
+        updateStep('step2', '⏳ Paying...', 'loading');
+
+        try {
+            const invoice = state.invoiceData.invoice;
+            const lineItems = state.invoiceData.line_items || [];
+
+            // Call test-payment endpoint
+            const response = await fetch(`${BASE_URL}/test-payment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: invoice.customer_email || 'customer@example.com',
+                    firstName: invoice.customer_name?.split(' ')[0] || 'Customer',
+                    lastName: invoice.customer_name?.split(' ')[1] || 'User',
+                    amount: invoice.total,
+                    reference: invoice.number || `INV-${Date.now()}`,
+                    items: lineItems.map(item => ({
+                        description: item.description || 'Item',
+                        amount: item.amount,
+                        quantity: item.quantity || 1
+                    }))
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Payment failed');
+
+            state.paymentId = data.data?.id || data.result?.paymentId;
+
+            // Show payment result
+            updateStep('step2', '✅ Paid', 'done');
+            updateStep('step3', '✅ Done', 'done');
+            $('paymentWaiting').classList.add('hidden');
+            $('paymentContent').classList.remove('hidden');
+            $('paymentData').textContent = JSON.stringify({
+                payment_id: state.paymentId,
+                amount: (invoice.total / 100).toFixed(2),
+                currency: invoice.currency?.toUpperCase(),
+                status: 'success'
+            }, null, 2);
+
+            btn.textContent = '✅ Paid';
+            btn.disabled = false;
+
+            showToast('✅ Payment successful! Generate receipt.', 'success');
+
+        } catch (error) {
+            btn.textContent = '💳 Retry';
+            btn.disabled = false;
+            updateStep('step2', '❌ Failed', 'error');
+            showToast('❌ ' + error.message, 'error');
+        }
+    });
+
+    // ============================================================
+    // STEP 4: GENERATE RECEIPT
+    // ============================================================
+    $('receiptBtn').addEventListener('click', async () => {
+        updateStep('step3', '⏳ Generating...', 'loading');
+
+        try {
+            // Fetch the latest receipt from the database
+            const response = await fetch(`${BASE_URL}/receipts`);
+            const data = await response.json();
+
+            if (!data.success || data.receipts.length === 0) {
+                throw new Error('No receipt found');
+            }
+
+            const latest = data.receipts[0];
+            state.receiptData = latest;
+            state.pdfUrl = latest.pdf_url;
+
+            // Show receipt text
+            const receiptText = latest.receipt_text || 'Receipt generated';
+            $('receiptText').textContent = receiptText;
+
+            updateStep('step3', '✅ Done', 'done');
+            updateStep('step4', '📄 Ready', 'ready');
+            $('receiptWaiting').classList.add('hidden');
+            $('receiptContent').classList.remove('hidden');
+
+            showToast('✅ Receipt generated!', 'success');
+
+        } catch (error) {
+            updateStep('step3', '❌ Failed', 'error');
+            showToast('❌ ' + error.message, 'error');
+        }
+    });
+
+    // ----- View PDF -----
+    $('viewReceiptBtn').addEventListener('click', () => {
+        if (state.pdfUrl) {
+            window.open(`${BASE_URL}${state.pdfUrl}`, '_blank');
+        } else if (state.receiptData?.pdf_path) {
+            const filename = state.receiptData.pdf_path.split('/').pop();
+            window.open(`${BASE_URL}/receipts/view/${filename}`, '_blank');
+        } else {
+            showToast('No PDF available yet', 'error');
+        }
+    });
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    console.log('🧾 Pinch Receipt - Customer App loaded');
+    console.log('📍 BASE_URL:', BASE_URL);
+    console.log('💡 Scan the QR code from the EFTPOS device');
+
+    updateStep('step1', '⏳ Ready', 'ready');
+    updateStep('step2', '⏳ Waiting', '');
+    updateStep('step3', '⏳ Waiting', '');
+    updateStep('step4', '⏳ Waiting', '');
+</script>
+</body>
+</html>

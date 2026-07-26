@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>EFTPOS Simulator - Staff</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #1a1a2e;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+        }
+        .eftpos {
+            background: #16213e;
+            border-radius: 32px;
+            padding: 24px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 1px solid #0f3460;
+        }
+        .eftpos-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            color: #fff;
+        }
+        .eftpos-header .brand { font-weight: 700; font-size: 18px; color: #e94560; }
+        .eftpos-header .status { font-size: 12px; background: #0f3460; padding: 4px 12px; border-radius: 20px; color: #4fc3f7; }
+        .eftpos-screen {
+            background: #0a0a1a;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            border: 1px solid #1a1a3e;
+            min-height: 300px;
+        }
+        .eftpos-screen .label { color: #8888aa; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .eftpos-screen .value-input {
+            background: #0d0d2b;
+            border: 1px solid #2a2a5a;
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            width: 100%;
+            font-size: 14px;
+            margin-bottom: 12px;
+            font-family: 'Courier New', monospace;
+        }
+        .eftpos-screen .value-input:focus { outline: none; border-color: #e94560; }
+        .eftpos-screen .amount-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: #4fc3f7;
+            text-align: center;
+            padding: 10px 0;
+            font-family: 'Courier New', monospace;
+        }
+        .eftpos-screen .amount-display .currency { font-size: 18px; color: #666; }
+
+        .item-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 0.5fr;
+            gap: 6px;
+            margin-bottom: 6px;
+            align-items: center;
+        }
+        .item-row input {
+            background: #0d0d2b;
+            border: 1px solid #2a2a5a;
+            color: #fff;
+            padding: 6px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            width: 100%;
+            font-family: 'Courier New', monospace;
+        }
+        .item-row input:focus { outline: none; border-color: #e94560; }
+        .item-row .remove-btn {
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .btn-add-item {
+            background: transparent;
+            color: #4fc3f7;
+            border: 1px dashed #4fc3f7;
+            padding: 8px;
+            border-radius: 8px;
+            width: 100%;
+            cursor: pointer;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        .btn-add-item:hover { background: rgba(79,195,247,0.1); }
+
+        .btn-generate {
+            background: #4fc3f7;
+            color: #0a0a1a;
+            border: none;
+            padding: 16px;
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 700;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 8px;
+        }
+        .btn-generate:active { transform: scale(0.98); }
+        .btn-generate:disabled { background: #555; color: #999; cursor: not-allowed; }
+        .btn-generate.processing { background: #f57c00; animation: pulse 1s infinite; }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        .btn-reset {
+            background: transparent;
+            color: #666;
+            border: 1px solid #333;
+            padding: 10px;
+            border-radius: 12px;
+            width: 100%;
+            cursor: pointer;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+
+        .result-box {
+            background: #0a0a1a;
+            border-radius: 12px;
+            padding: 12px;
+            margin-top: 12px;
+            border: 1px solid #1a3a3a;
+            display: none;
+        }
+        .result-box.success { border-color: #4caf50; display: block; }
+        .result-box.error { border-color: #e94560; display: block; }
+        .result-box .result-label { color: #888; font-size: 11px; }
+        .result-box .result-value { color: #fff; font-size: 12px; font-family: monospace; word-break: break-all; }
+
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+        .badge-green { background: #1b5e20; color: #81c784; }
+        .badge-red { background: #b71c1c; color: #ef9a9a; }
+        .badge-blue { background: #0d47a1; color: #64b5f6; }
+
+        .form-section { margin-bottom: 12px; }
+        .form-section .section-title {
+            color: #8888aa;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #1a1a3e;
+            padding-bottom: 4px;
+        }
+
+        .flex-row { display: flex; gap: 8px; }
+        .flex-row .flex-1 { flex: 1; }
+
+        /* QR Code Section */
+        #qrSection {
+            display: none;
+            margin-top: 16px;
+            text-align: center;
+            background: #0a0a1a;
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid #2a2a5a;
+        }
+        #qrSection .qr-title {
+            color: #4fc3f7;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        #qrCode {
+            background: white;
+            padding: 16px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        #qrCode img {
+            display: block;
+            width: 180px;
+            height: 180px;
+            margin: 0 auto;
+        }
+        #qrCode .qr-label {
+            font-size: 10px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        #qrCode .qr-invoice-id {
+            font-size: 11px;
+            color: #1a1a2e;
+            font-family: monospace;
+            word-break: break-all;
+            max-width: 180px;
+            font-weight: 600;
+            margin-top: 6px;
+        }
+
+        .copy-btn {
+            background: transparent;
+            color: #4fc3f7;
+            border: 1px solid #4fc3f7;
+            padding: 6px 16px;
+            border-radius: 8px;
+            margin-top: 8px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .copy-btn:hover { background: rgba(79,195,247,0.1); }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a2e;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            border: 1px solid #333;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+        }
+        .toast.show { display: block; }
+        .toast.success { border-color: #4caf50; }
+        .toast.error { border-color: #e94560; }
+
+        @media (max-width: 480px) {
+            .eftpos { padding: 16px; }
+            .eftpos-screen { padding: 14px; }
+            .item-row { grid-template-columns: 1.5fr 0.8fr 0.8fr 0.5fr; gap: 4px; }
+            .item-row input { font-size: 11px; padding: 4px 6px; }
+            #qrCode img { width: 140px; height: 140px; }
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="eftpos" id="eftposApp">
+    <div class="eftpos-header">
+        <span class="brand">💳 PINCH EFTPOS</span>
+        <span class="status" id="connectionStatus">● Online</span>
+    </div>
+
+    <div class="eftpos-screen" id="eftposScreen">
+        <div class="label">💳 GENERATE INVOICE QR</div>
+        <div class="amount-display">
+            <span class="currency">AUD</span>
+            <span id="totalDisplay">0.00</span>
+        </div>
+
+        <div class="form-section">
+            <div class="section-title">🏪 Store Details</div>
+            <div class="flex-row">
+                <div class="flex-1">
+                    <div class="label">Store Name</div>
+                    <input class="value-input" id="storeName" value="Bunnings Warehouse" placeholder="Store name">
+                </div>
+                <div class="flex-1">
+                    <div class="label">Store Email</div>
+                    <input class="value-input" id="storeEmail" value="receipts@bunnings.com.au" placeholder="Email">
+                </div>
+            </div>
+            <div class="flex-row">
+                <div class="flex-1">
+                    <div class="label">Staff Name</div>
+                    <input class="value-input" id="staffName" value="John Smith" placeholder="Staff name">
+                </div>
+                <div class="flex-1">
+                    <div class="label">Staff Phone</div>
+                    <input class="value-input" id="staffPhone" value="0400 123 456" placeholder="Phone">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="section-title">📦 Items</div>
+            <div id="itemsContainer"></div>
+            <button class="btn-add-item" id="addItemBtn">+ Add Item</button>
+        </div>
+
+        <div class="form-section">
+            <div class="section-title">🧾 Tax</div>
+            <div class="flex-row">
+                <div class="flex-1">
+                    <div class="label">GST Rate (%)</div>
+                    <input class="value-input" id="gstRate" value="10" placeholder="10" type="number">
+                </div>
+                <div class="flex-1">
+                    <div class="label">GST Amount (AUD)</div>
+                    <input class="value-input" id="gstAmount" value="4.50" placeholder="0.00" type="number" step="0.01" readonly>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="section-title">📄 Invoice</div>
+            <div class="flex-row">
+                <div class="flex-1">
+                    <div class="label">Invoice Number</div>
+                    <input class="value-input" id="invoiceNumber" placeholder="Invoice #">
+                </div>
+                <div class="flex-1">
+                    <div class="label">Reference</div>
+                    <input class="value-input" id="reference" placeholder="Reference">
+                </div>
+            </div>
+        </div>
+
+        <!-- QR CODE SECTION -->
+        <div id="qrSection">
+            <div class="qr-title">📱 SCAN WITH CUSTOMER APP</div>
+            <div id="qrCode">
+                <div class="qr-label">INVOICE ID</div>
+                <img id="qrImage" src="" alt="QR Code" style="display:none;">
+                <div class="qr-invoice-id" id="qrInvoiceId">-</div>
+            </div>
+            <button class="copy-btn" id="copyInvoiceBtn">📋 Copy Invoice ID</button>
+        </div>
+
+        <!-- RESULT BOX -->
+        <div class="result-box" id="resultBox">
+            <div class="result-label" id="resultLabel">Result</div>
+            <div class="result-value" id="resultValue">-</div>
+        </div>
+    </div>
+
+    <button class="btn-generate" id="generateBtn">📄 GENERATE QR CODE</button>
+    <button class="btn-reset" id="resetBtn">↺ Reset to Defaults</button>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+    // ============================================================
+    // STATE
+    // ============================================================
+    let items = [
+        { name: 'Hammer', qty: 1, price: 25.00 },
+        { name: 'Paint', qty: 2, price: 10.00 },
+        { name: 'Tape', qty: 1, price: 5.00 }
+    ];
+
+    const DEFAULT_ITEMS = [
+        { name: 'Hammer', qty: 1, price: 25.00 },
+        { name: 'Paint', qty: 2, price: 10.00 },
+        { name: 'Tape', qty: 1, price: 5.00 }
+    ];
+
+    const $ = id => document.getElementById(id);
+    const API_BASE = window.location.origin;
+
+    // ============================================================
+    // RENDER ITEMS
+    // ============================================================
+    function renderItems() {
+        const container = $('itemsContainer');
+        container.innerHTML = '';
+        items.forEach((item, index) => {
+            const row = document.createElement('div');
+            row.className = 'item-row';
+            row.innerHTML = `
+                <input class="item-name" value="${item.name}" placeholder="Item" data-index="${index}">
+                <input class="item-qty" value="${item.qty}" placeholder="Qty" type="number" data-index="${index}">
+                <input class="item-price" value="${item.price.toFixed(2)}" placeholder="Price" type="number" step="0.01" data-index="${index}">
+                <button class="remove-btn" data-index="${index}">✕</button>
+            `;
+            container.appendChild(row);
+        });
+
+        document.querySelectorAll('.item-name').forEach(el => {
+            el.addEventListener('input', (e) => {
+                items[parseInt(e.target.dataset.index)].name = e.target.value;
+                updateTotal();
+            });
+        });
+        document.querySelectorAll('.item-qty').forEach(el => {
+            el.addEventListener('input', (e) => {
+                items[parseInt(e.target.dataset.index)].qty = parseFloat(e.target.value) || 0;
+                updateTotal();
+            });
+        });
+        document.querySelectorAll('.item-price').forEach(el => {
+            el.addEventListener('input', (e) => {
+                items[parseInt(e.target.dataset.index)].price = parseFloat(e.target.value) || 0;
+                updateTotal();
+            });
+        });
+        document.querySelectorAll('.remove-btn').forEach(el => {
+            el.addEventListener('click', (e) => {
+                items.splice(parseInt(e.target.dataset.index), 1);
+                renderItems();
+                updateTotal();
+            });
+        });
+        updateTotal();
+    }
+
+    // ============================================================
+    // UPDATE TOTAL
+    // ============================================================
+    function updateTotal() {
+        let total = 0;
+        items.forEach(item => { total += (item.qty || 0) * (item.price || 0); });
+        $('totalDisplay').textContent = total.toFixed(2);
+        const gstRate = parseFloat($('gstRate').value) || 10;
+        $('gstAmount').value = (total * (gstRate / 100)).toFixed(2);
+    }
+
+    // ============================================================
+    // ADD ITEM
+    // ============================================================
+    $('addItemBtn').addEventListener('click', () => {
+        items.push({ name: 'New Item', qty: 1, price: 0.00 });
+        renderItems();
+        const inputs = document.querySelectorAll('.item-name');
+        if (inputs.length > 0) {
+            inputs[inputs.length - 1].focus();
+        }
+    });
+
+    // ============================================================
+    // RESET
+    // ============================================================
+    $('resetBtn').addEventListener('click', () => {
+        items = DEFAULT_ITEMS.map(i => ({ ...i }));
+        renderItems();
+        $('storeName').value = 'Bunnings Warehouse';
+        $('storeEmail').value = 'receipts@bunnings.com.au';
+        $('staffName').value = 'John Smith';
+        $('staffPhone').value = '0400 123 456';
+        $('gstRate').value = '10';
+        $('invoiceNumber').value = `INV-${Date.now().toString().slice(-6)}`;
+        $('reference').value = `REF-${Date.now().toString().slice(-6)}`;
+        document.getElementById('qrSection').style.display = 'none';
+        const resultBox = $('resultBox');
+        resultBox.className = 'result-box';
+        resultBox.style.display = 'none';
+        $('generateBtn').disabled = false;
+        $('generateBtn').textContent = '📄 GENERATE QR CODE';
+        $('generateBtn').className = 'btn-generate';
+        $('connectionStatus').textContent = '● Online';
+        updateTotal();
+        showToast('🔄 Reset to defaults', 'success');
+    });
+
+    // ============================================================
+    // GENERATE QR CODE
+    // ============================================================
+    $('generateBtn').addEventListener('click', async () => {
+        if ($('generateBtn').disabled) return;
+
+        const storeName = $('storeName').value || 'Store';
+        const storeEmail = $('storeEmail').value || 'store@example.com';
+        const staffName = $('staffName').value || 'Staff';
+        const staffPhone = $('staffPhone').value || 'N/A';
+        const invoiceNumber = $('invoiceNumber').value || `INV-${Date.now().toString().slice(-6)}`;
+        const reference = $('reference').value || `REF-${Date.now().toString().slice(-6)}`;
+        const gstRate = parseFloat($('gstRate').value) || 10;
+
+        let subtotal = 0;
+        const lineItems = [];
+        items.forEach(item => {
+            const qty = item.qty || 0;
+            const price = item.price || 0;
+            const total = qty * price;
+            subtotal += total;
+            lineItems.push({
+                description: item.name || 'Item',
+                amount: Math.round(price * 100),
+                quantity: qty
+            });
+        });
+
+        const gstAmount = subtotal * (gstRate / 100);
+        const total = subtotal + gstAmount;
+
+        $('generateBtn').disabled = true;
+        $('generateBtn').textContent = '⏳ GENERATING...';
+        $('generateBtn').className = 'btn-generate processing';
+        $('connectionStatus').textContent = '⏳ Generating...';
+
+        const resultBox = $('resultBox');
+        resultBox.className = 'result-box';
+        resultBox.style.display = 'none';
+
+        try {
+            const response = await fetch(`${API_BASE}/eftpos-generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    storeName, storeEmail, staffName, staffPhone,
+                    invoiceNumber, reference,
+                    items: lineItems,
+                    subtotal: Math.round(subtotal * 100),
+                    gstAmount: Math.round(gstAmount * 100),
+                    total: Math.round(total * 100),
+                    gstRate
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Generation failed');
+
+            // Generate QR Code using external API (api.qrserver.com)
+            const qrText = data.invoice_id;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrText)}`;
+
+            // Show QR Section
+            const qrSection = document.getElementById('qrSection');
+            qrSection.style.display = 'block';
+            const qrImage = document.getElementById('qrImage');
+            qrImage.src = qrUrl;
+            qrImage.style.display = 'block';
+            document.getElementById('qrInvoiceId').textContent = data.invoice_id;
+
+            resultBox.className = 'result-box success';
+            resultBox.style.display = 'block';
+            document.getElementById('resultLabel').textContent = '✅ QR Code Generated!';
+            document.getElementById('resultValue').innerHTML = `
+                Invoice ID: <strong>${data.invoice_id}</strong><br>
+                Total: ${data.currency || 'AUD'} $${(data.total / 100).toFixed(2)}<br>
+                <span style="color:#4fc3f7;">📱 Scan QR code with customer app to pay</span>
+            `;
+
+            $('generateBtn').textContent = '✅ QR READY';
+            $('generateBtn').className = 'btn-generate';
+            $('connectionStatus').textContent = '✅ Ready';
+            showToast('✅ QR Code generated! Scan with customer app.', 'success');
+
+        } catch (error) {
+            resultBox.className = 'result-box error';
+            resultBox.style.display = 'block';
+            document.getElementById('resultLabel').textContent = '❌ Generation Failed';
+            document.getElementById('resultValue').textContent = error.message;
+            $('generateBtn').textContent = '📄 RETRY';
+            $('generateBtn').className = 'btn-generate';
+            $('generateBtn').disabled = false;
+            $('connectionStatus').textContent = '❌ Error';
+            showToast('❌ ' + error.message, 'error');
+        }
+    });
+
+    // ============================================================
+    // COPY INVOICE ID
+    // ============================================================
+    document.getElementById('copyInvoiceBtn').addEventListener('click', () => {
+        const invoiceId = document.getElementById('qrInvoiceId').textContent;
+        if (invoiceId && invoiceId !== '-') {
+            navigator.clipboard?.writeText(invoiceId).then(() => {
+                showToast('📋 Invoice ID copied!', 'success');
+            }).catch(() => {
+                prompt('Copy this invoice ID:', invoiceId);
+            });
+        } else {
+            showToast('No invoice to copy', 'error');
+        }
+    });
+
+    // ============================================================
+    // TOAST
+    // ============================================================
+    let toastTimeout;
+
+    function showToast(message, type = '') {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = 'toast show ' + type;
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+            toast.className = 'toast';
+        }, 4000);
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    renderItems();
+    $('invoiceNumber').value = `INV-${Date.now().toString().slice(-6)}`;
+    $('reference').value = `REF-${Date.now().toString().slice(-6)}`;
+    updateTotal();
+
+    console.log('💳 EFTPOS Simulator loaded at:', API_BASE);
+    console.log('📱 Customer app: open demo.html on another device');
+</script>
+</body>
+</html>
