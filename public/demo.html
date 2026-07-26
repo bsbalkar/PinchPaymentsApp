@@ -251,6 +251,15 @@
         }
         #statusMessage.success { background: #e8f5e9; color: #2e7d32; }
         #statusMessage.error { background: #ffebee; color: #c62828; }
+
+        .amount-big {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a237e;
+            text-align: center;
+            padding: 8px 0;
+        }
+        .amount-big .currency { font-size: 18px; color: #666; }
     </style>
 </head>
 <body>
@@ -498,14 +507,19 @@
 
         // Decoded text is the Invoice ID
         const invoiceId = decodedText.trim();
-        if (invoiceId) {
+        if (invoiceId && invoiceId.startsWith('in_')) {
             showToast('✅ QR scanned successfully!', 'success');
             setStatus('✅ QR scanned! Fetching invoice...', 'success');
             fetchInvoice(invoiceId);
         } else {
             showToast('❌ Invalid QR code', 'error');
             setStatus('❌ Invalid QR code. Please try again.', 'error');
-            startScanner();
+            // Restart scanner after 2 seconds
+            setTimeout(() => {
+                if (!scannerRunning) {
+                    startScanner();
+                }
+            }, 2000);
         }
     }
 
@@ -558,6 +572,19 @@
         const invoice = data.invoice;
         const lineItems = data.line_items || [];
 
+        // Calculate total from invoice
+        let total = invoice.total || 0;
+        let currency = invoice.currency?.toUpperCase() || 'AUD';
+        let totalDisplay = (total / 100).toFixed(2);
+
+        // If line items exist, calculate from them for display
+        if (lineItems.length > 0) {
+            const calculatedTotal = lineItems.reduce((sum, item) => sum + (item.amount * (item.quantity || 1)), 0);
+            if (calculatedTotal > 0) {
+                totalDisplay = (calculatedTotal / 100).toFixed(2);
+            }
+        }
+
         let itemsHtml = lineItems.map(item => `
             <div class="invoice-item">
                 <span>${item.description || 'Item'} × ${item.quantity || 1}</span>
@@ -565,8 +592,8 @@
             </div>
         `).join('');
 
-        const total = (invoice.total / 100).toFixed(2);
-        const currency = invoice.currency?.toUpperCase() || 'AUD';
+        // Get store name from metadata
+        const storeName = invoice.metadata?.store_name || invoice.metadata?.storeName || 'Store';
 
         $('invoiceItems').innerHTML = `
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
@@ -574,13 +601,15 @@
                     <div style="font-size:10px;color:#666;">Invoice #</div>
                     <div style="font-weight:600;font-size:14px;">${invoice.number || 'N/A'}</div>
                 </div>
-                <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
-                    <div style="font-size:10px;color:#666;">Total</div>
-                    <div style="font-weight:700;font-size:16px;color:#1a237e;">${currency} $${total}</div>
+                <div style="background:#e8f5e9;padding:10px;border-radius:8px;border:2px solid #4caf50;">
+                    <div style="font-size:10px;color:#2e7d32;">Total Amount</div>
+                    <div class="amount-big" style="font-size:24px;padding:4px 0;color:#1a237e;">
+                        ${currency} $${totalDisplay}
+                    </div>
                 </div>
                 <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
                     <div style="font-size:10px;color:#666;">Store</div>
-                    <div style="font-weight:600;font-size:13px;">${invoice.metadata?.store_name || 'Store'}</div>
+                    <div style="font-weight:600;font-size:13px;">${storeName}</div>
                 </div>
                 <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
                     <div style="font-size:10px;color:#666;">Status</div>
@@ -591,7 +620,7 @@
             ${itemsHtml || '<p style="color:#999;font-size:13px;">No items</p>'}
             <div class="invoice-total">
                 <span>Total</span>
-                <span>${currency} $${total}</span>
+                <span>${currency} $${totalDisplay}</span>
             </div>
         `;
     }
@@ -614,6 +643,12 @@
             const invoice = state.invoiceData.invoice;
             const lineItems = state.invoiceData.line_items || [];
 
+            // Calculate total
+            let total = invoice.total || 1000;
+            if (lineItems.length > 0) {
+                total = lineItems.reduce((sum, item) => sum + (item.amount * (item.quantity || 1)), 0);
+            }
+
             const response = await fetch(`${BASE_URL}/test-payment`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -621,7 +656,7 @@
                     email: invoice.customer_email || 'customer@example.com',
                     firstName: invoice.customer_name?.split(' ')[0] || 'Customer',
                     lastName: invoice.customer_name?.split(' ')[1] || 'User',
-                    amount: invoice.total,
+                    amount: total,
                     reference: invoice.number || `INV-${Date.now()}`,
                     items: lineItems.map(item => ({
                         description: item.description || 'Item',
@@ -634,7 +669,7 @@
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Payment failed');
 
-            state.paymentId = data.data?.id || data.result?.paymentId;
+            state.paymentId = data.payment?.id || data.data?.id || data.result?.paymentId;
 
             updateStep('step2', '✅ Paid', 'done');
             updateStep('step3', '✅ Done', 'done');
@@ -642,8 +677,8 @@
             $('paymentContent').classList.remove('hidden');
             $('paymentData').textContent = JSON.stringify({
                 payment_id: state.paymentId,
-                amount: (invoice.total / 100).toFixed(2),
-                currency: invoice.currency?.toUpperCase(),
+                amount: (total / 100).toFixed(2),
+                currency: invoice.currency?.toUpperCase() || 'AUD',
                 status: 'success'
             }, null, 2);
 
