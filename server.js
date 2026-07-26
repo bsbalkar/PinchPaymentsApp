@@ -4,6 +4,74 @@
 // ============================================
 
 require('dotenv').config();
+
+// ============================================
+// AUTO DATABASE SETUP
+// ============================================
+
+const sqlite3 = require('sqlite3').verbose();
+
+async function setupDatabase() {
+    const dbPath = process.env.DATABASE_PATH || './database/receipts.db';
+    const db = new sqlite3.Database(dbPath);
+    
+    return new Promise((resolve, reject) => {
+        db.serialize(() => {
+            // Create payers table
+            db.run(`
+                CREATE TABLE IF NOT EXISTS payers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pinch_payer_id TEXT UNIQUE NOT NULL,
+                    email TEXT NOT NULL,
+                    first_name TEXT,
+                    last_name TEXT,
+                    phone TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME
+                )
+            `, (err) => {
+                if (err) console.error('❌ Error creating payers table:', err.message);
+                else console.log('✅ payers table ready');
+            });
+
+            // Create receipts table
+            db.run(`
+                CREATE TABLE IF NOT EXISTS receipts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pinch_payment_id TEXT UNIQUE NOT NULL,
+                    payer_id TEXT NOT NULL,
+                    customer_email TEXT NOT NULL,
+                    customer_name TEXT,
+                    amount INTEGER NOT NULL,
+                    currency TEXT DEFAULT 'AUD',
+                    invoice_number TEXT,
+                    reference TEXT,
+                    receipt_text TEXT,
+                    pdf_path TEXT,
+                    pdf_url TEXT,
+                    status TEXT DEFAULT 'pending',
+                    webhook_received_at DATETIME,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME
+                )
+            `, (err) => {
+                if (err) console.error('❌ Error creating receipts table:', err.message);
+                else console.log('✅ receipts table ready');
+            });
+
+            // Create indexes
+            db.run(`CREATE INDEX IF NOT EXISTS idx_receipts_payment_id ON receipts(pinch_payment_id)`);
+            db.run(`CREATE INDEX IF NOT EXISTS idx_receipts_email ON receipts(customer_email)`);
+            db.run(`CREATE INDEX IF NOT EXISTS idx_payers_email ON payers(email)`);
+        });
+
+        db.close((err) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -649,6 +717,7 @@ app.use((err, req, res, next) => {
 // ============================================================
 // START SERVER
 // ============================================================
+await setupDatabase();
 
 app.listen(PORT, () => {
     console.log(`
