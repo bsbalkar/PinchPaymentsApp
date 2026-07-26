@@ -1,20 +1,19 @@
 // ============================================
 // services/pdfGenerator.js
-// PURPOSE: Generate PDF receipts from payment data
+// PURPOSE: Generate clean PDF receipts
 // ============================================
 
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-// Ensure receipts directory exists
 const RECEIPTS_DIR = path.join(__dirname, '..', 'receipts');
 if (!fs.existsSync(RECEIPTS_DIR)) {
     fs.mkdirSync(RECEIPTS_DIR, { recursive: true });
 }
 
-// ----- Generate a PDF receipt -----
-async function generateReceiptPdf(receiptData) {
+// ----- Generate a clean PDF receipt -----
+async function generateReceipt(receiptData) {
     return new Promise((resolve, reject) => {
         try {
             const {
@@ -26,146 +25,177 @@ async function generateReceiptPdf(receiptData) {
                 currency = 'AUD',
                 reference,
                 receipt_text,
-                created_at
+                created_at,
+                store_name = 'Store',
+                staff_name = 'Staff',
+                invoice_number,
+                line_items = []
             } = receiptData;
 
-            // Create filename: receipt_{paymentId}.pdf
-            const filename = `receipt_${pinch_payment_id || id}_${Date.now()}.pdf`;
+            const paymentId = pinch_payment_id || id || `pmt_${Date.now()}`;
+            const filename = `receipt_${paymentId}_${Date.now()}.pdf`;
             const filePath = path.join(RECEIPTS_DIR, filename);
 
-            // Create PDF document
+            // ✅ Create PDF with proper settings
             const doc = new PDFDocument({
                 size: 'A4',
                 margin: 50,
                 info: {
-                    Title: `Receipt ${reference || pinch_payment_id}`,
+                    Title: `Receipt ${reference || paymentId}`,
                     Author: 'Pinch Receipt App',
                     Subject: 'Payment Receipt',
                     Creator: 'Pinch Me Hackathon'
-                }
+                },
+                compress: true // ✅ Enable compression for cleaner output
             });
 
-            // Pipe to file
             const writeStream = fs.createWriteStream(filePath);
             doc.pipe(writeStream);
 
-            // ----- Add content to PDF -----
-
-            // Header: Logo / Title
+            // ----- Header -----
             doc.fontSize(20)
                .font('Helvetica-Bold')
+               .fillColor('#1a237e')
                .text('PINCH RECEIPT', { align: 'center' });
             
+            doc.fillColor('#000000');
             doc.moveDown(0.5);
-            
-            // Divider line
+
+            // ----- Store Name -----
+            doc.fontSize(14)
+               .font('Helvetica-Bold')
+               .text(store_name || 'Store', { align: 'center' });
+            doc.moveDown(0.3);
+
+            // ----- Divider -----
             doc.strokeColor('#cccccc')
                .lineWidth(1)
                .moveTo(50, doc.y)
                .lineTo(545, doc.y)
                .stroke();
-            
-            doc.moveDown(1);
+            doc.moveDown(0.5);
 
-            // Receipt Title
-            doc.fontSize(16)
-               .font('Helvetica-Bold')
-               .text('PAYMENT RECEIPT', { align: 'center' });
-            
-            doc.moveDown(1);
-
-            // Transaction Details (Left aligned)
+            // ----- Payment Details -----
             const details = [
-                ['Receipt Number:', reference || 'N/A'],
-                ['Transaction ID:', pinch_payment_id || 'N/A'],
-                ['Date:', new Date(created_at).toLocaleString('en-AU')],
+                ['Invoice #:', invoice_number || reference || 'N/A'],
+                ['Payment ID:', paymentId],
+                ['Date:', new Date(created_at || Date.now()).toLocaleString('en-AU')],
                 ['Status:', '✅ SUCCESS'],
                 ['Customer:', customer_name || 'N/A'],
-                ['Email:', customer_email || 'N/A']
+                ['Email:', customer_email || 'N/A'],
+                ['Staff:', staff_name || 'N/A']
             ];
 
-            // Display in two columns
             let yPos = doc.y;
             details.forEach(([label, value]) => {
                 doc.fontSize(11)
                    .font('Helvetica-Bold')
-                   .text(label, 50, yPos, { width: 150, align: 'left' });
+                   .text(label, 50, yPos, { width: 120, align: 'left' });
                 
                 doc.font('Helvetica')
-                   .text(value, 170, yPos, { width: 300, align: 'left' });
+                   .text(String(value), 170, yPos, { width: 330, align: 'left' });
                 
-                yPos += 25;
+                yPos += 22;
             });
 
-            doc.y = yPos + 20;
+            doc.y = yPos + 10;
 
-            // Divider
+            // ----- Divider -----
             doc.strokeColor('#cccccc')
                .lineWidth(1)
                .moveTo(50, doc.y)
                .lineTo(545, doc.y)
                .stroke();
-            
-            doc.moveDown(1);
+            doc.moveDown(0.5);
 
-            // Amount Section
+            // ----- Amount -----
             doc.fontSize(14)
                .font('Helvetica-Bold')
                .text('AMOUNT PAID', { align: 'center' });
             
-            doc.moveDown(0.5);
+            doc.moveDown(0.3);
             
+            const displayAmount = amount || 0;
             doc.fontSize(28)
                .font('Helvetica-Bold')
                .fillColor('#2e7d32')
-               .text(`${currency} ${(amount / 100).toFixed(2)}`, { align: 'center' });
+               .text(`${currency || 'AUD'} ${(displayAmount / 100).toFixed(2)}`, { align: 'center' });
             
             doc.fillColor('#000000');
-            doc.moveDown(1);
+            doc.moveDown(0.5);
 
-            // Divider
+            // ----- Divider -----
             doc.strokeColor('#cccccc')
                .lineWidth(1)
                .moveTo(50, doc.y)
                .lineTo(545, doc.y)
                .stroke();
-            
-            doc.moveDown(1);
+            doc.moveDown(0.5);
 
-            // Receipt text (if available)
-            if (receipt_text) {
-                doc.fontSize(10)
-                   .font('Helvetica')
-                   .text(receipt_text, {
-                       align: 'left',
-                       width: 495,
-                       lineGap: 2
-                   });
-                doc.moveDown(1);
+            // ----- Line Items (if any) -----
+            if (line_items && line_items.length > 0) {
+                doc.fontSize(12)
+                   .font('Helvetica-Bold')
+                   .text('Items', { align: 'center' });
+                doc.moveDown(0.3);
+
+                line_items.forEach(item => {
+                    const desc = item.description || 'Item';
+                    const qty = item.quantity || 1;
+                    const price = item.amount || 0;
+                    const total = price * qty;
+                    doc.fontSize(10)
+                       .font('Helvetica')
+                       .text(`${desc} × ${qty}`, 50, doc.y, { width: 300 })
+                       .text(`$${(total / 100).toFixed(2)}`, 450, doc.y, { width: 100, align: 'right' });
+                    doc.y += 18;
+                });
+                doc.moveDown(0.5);
             }
 
-            // Footer
+            // ----- Receipt Text (if any) -----
+            if (receipt_text && typeof receipt_text === 'string') {
+                // ✅ Clean the receipt text - remove any PostScript artifacts
+                const cleanText = receipt_text
+                    .replace(/%P/g, '')  // Remove %P artifacts
+                    .replace(/%/g, '')    // Remove any stray %
+                    .trim();
+
+                if (cleanText && cleanText.length > 5) {
+                    doc.fontSize(9)
+                       .font('Courier')
+                       .text(cleanText, {
+                           align: 'left',
+                           width: 495,
+                           lineGap: 2
+                       });
+                    doc.moveDown(0.5);
+                }
+            }
+
+            // ----- Footer -----
+            doc.moveDown(0.5);
             doc.fontSize(10)
                .font('Helvetica')
                .fillColor('#666666')
                .text('Thank you for your payment!', { align: 'center' })
-               .text(`Generated on ${new Date().toLocaleString('en-AU')}`, { align: 'center', fontSize: 8 })
-               .text('This is a system-generated receipt. Please retain for your records.', { align: 'center', fontSize: 8 });
+               .text(`Generated: ${new Date().toLocaleString('en-AU')}`, { align: 'center', fontSize: 8 })
+               .text('This is a system-generated receipt.', { align: 'center', fontSize: 8 });
 
-            // Finalize PDF
+            // ✅ Finalize PDF
             doc.end();
 
-            // Wait for file to be written
             writeStream.on('finish', () => {
                 console.log(`✅ PDF generated: ${filename}`);
                 resolve({
                     filename,
                     filePath,
-                    pdfUrl: `/receipts/${filename}` // For local access
+                    pdfUrl: `/receipts/${filename}`
                 });
             });
 
             writeStream.on('error', (err) => {
+                console.error('❌ Write stream error:', err);
                 reject(err);
             });
 
@@ -176,55 +206,7 @@ async function generateReceiptPdf(receiptData) {
     });
 }
 
-// ----- Generate PDF from receipt data (wrapper) -----
-async function generateReceipt(receiptData) {
-    try {
-        // If receiptData is an object from the database, use it
-        // If it's a payment ID, fetch from database first
-        const result = await generateReceiptPdf(receiptData);
-        return result;
-    } catch (error) {
-        console.error('❌ Failed to generate receipt:', error);
-        throw error;
-    }
-}
-
-// ----- List all generated receipts -----
-function listReceipts() {
-    return new Promise((resolve, reject) => {
-        fs.readdir(RECEIPTS_DIR, (err, files) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            const pdfFiles = files.filter(file => file.endsWith('.pdf'));
-            resolve(pdfFiles.map(file => ({
-                filename: file,
-                path: path.join(RECEIPTS_DIR, file),
-                url: `/receipts/${file}`
-            })));
-        });
-    });
-}
-
-// ----- Delete a receipt PDF -----
-function deleteReceiptPdf(filename) {
-    return new Promise((resolve, reject) => {
-        const filePath = path.join(RECEIPTS_DIR, filename);
-        fs.unlink(filePath, (err) => {
-            if (err) {
-                reject(err);
-                return;
-            }
-            resolve({ deleted: true, filename });
-        });
-    });
-}
-
 module.exports = {
     generateReceipt,
-    generateReceiptPdf,
-    listReceipts,
-    deleteReceiptPdf,
     RECEIPTS_DIR
 };

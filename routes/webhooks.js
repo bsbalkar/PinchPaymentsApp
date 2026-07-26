@@ -1,6 +1,6 @@
 // ============================================
 // routes/webhooks.js
-// PURPOSE: Handle webhooks from Pinch and Stripe
+// PURPOSE: Handle webhooks
 // ============================================
 
 const express = require('express');
@@ -8,131 +8,116 @@ const router = express.Router();
 const db = require('../database/db');
 const { generateReceipt } = require('../services/pdfGenerator');
 
-// ----- Handle Pinch payment created event -----
-async function handlePinchPayment(paymentData) {
-    console.log('💳 Pinch payment received:', paymentData.id);
+// ----- Handle payment created -----
+async function handlePaymentCreated(paymentData) {
+    console.log('💳 Processing payment:', paymentData.id);
 
     try {
-        // 1. Save receipt to database
-        const result = await db.saveReceiptFromPinch(paymentData);
-        console.log('✅ Receipt saved to database');
+        // ✅ SAFELY extract data
+        const paymentId = paymentData.id || paymentData.pinch_payment_id || `pmt_${Date.now()}`;
+        const payerId = paymentData.payerId || paymentData.payer_id || `pyr_${Date.now()}`;
+        const amount = paymentData.amount || 0;
+        const currency = paymentData.currency || 'AUD';
+        const reference = paymentData.reference || `REF-${Date.now()}`;
 
-        // 2. Get the full receipt record
-        const receipt = await db.getReceiptByPaymentId(paymentData.id);
-        if (!receipt) {
-            throw new Error('Receipt not found after save');
+        // ✅ SAFELY extract payer
+        let email = 'customer@example.com';
+        let firstName = 'Customer';
+        let lastName = 'User';
+
+        if (paymentData.payer) {
+            email = paymentData.payer.emailAddress || paymentData.payer.email || email;
+            firstName = paymentData.payer.firstName || paymentData.payer.first_name || firstName;
+            lastName = paymentData.payer.lastName || paymentData.payer.last_name || lastName;
         }
 
-        // 3. Generate PDF
+        // ✅ Store info
+        const storeName = paymentData.store_name || paymentData.storeName || 'Store';
+        const staffName = paymentData.staff_name || paymentData.staffName || 'Staff';
+        const invoiceNumber = paymentData.invoice_number || paymentData.invoiceNumber || reference;
+
+        console.log('📋 Data:', { paymentId, email, firstName, lastName, amount, storeName });
+
+        // Save payer
+        await db.savePayer(payerId, email, firstName, lastName);
+
+        // Generate receipt text
+        let receiptText = paymentData.receipt_text || `
+╔═══════════════════════════════════════════════╗
+║              RECEIPT                         ║
+╠═══════════════════════════════════════════════╣
+║ Payment: ${paymentId}
+║ Reference: ${reference}
+║ Amount: ${currency} ${(amount / 100).toFixed(2)}
+║ Status: ✅ SUCCESS
+╚═══════════════════════════════════════════════╝
+        `.trim();
+
+        if (receiptText) {
+    receiptText = receiptText
+        .replace(/%P/g, '')  // Remove %P artifacts
+        .replace(/%/g, '')    // Remove any stray %
+        .trim();
+}
+
+        // Save to database
+        await db.run(`
+            INSERT OR REPLACE INTO receipts (
+                pinch_payment_id, payer_id, customer_email, customer_name,
+                amount, currency, reference, receipt_text, status, webhook_received_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `, [
+            paymentId, payerId, email,
+            `${firstName} ${lastName}`.trim(),
+            amount, currency, reference,
+            receiptText, 'pending'
+        ]);
+
+        console.log('✅ Receipt saved');
+
+        // Get receipt and generate PDF
+        const receipt = await db.getReceiptByPaymentId(paymentId);
+        if (!receipt) throw new Error('Receipt not found');
+
+        // Add extra fields for PDF
+        receipt.store_name = storeName;
+        receipt.staff_name = staffName;
+        receipt.invoice_number = invoiceNumber;
+        receipt.line_items = paymentData.line_items || [];
+
         const pdfResult = await generateReceipt(receipt);
-        console.log('✅ PDF generated:', pdfResult.filename);
+        await db.updateReceiptWithPdf(paymentId, pdfResult.filePath, pdfResult.pdfUrl);
 
-        // 4. Update database with PDF path
-        await db.updateReceiptWithPdf(
-            paymentData.id,
-            pdfResult.filePath,
-            pdfResult.pdfUrl
-        );
-
-        console.log(`✅ Complete: Pinch payment ${paymentData.id} processed`);
-
-        return {
-            success: true,
-            paymentId: paymentData.id,
-            pdfUrl: pdfResult.pdfUrl,
-            pdfPath: pdfResult.filePath
-        };
+        console.log(`✅ Complete: ${paymentId}`);
+        return { success: true, paymentId, pdfUrl: pdfResult.pdfUrl };
 
     } catch (error) {
-        console.error('❌ Error processing Pinch payment:', error);
+        console.error('❌ Error:', error.message);
         throw error;
     }
 }
 
-// ----- Webhook endpoint -----
+// ----- Routes -----
 router.post('/pinch', async (req, res) => {
-    console.log('📨 Pinch webhook received:', req.body);
-
     try {
         const event = req.body;
-
-        // Verify webhook secret (optional)
-        const webhookSecret = req.headers['x-webhook-secret'];
-        if (process.env.WEBHOOK_SECRET && webhookSecret !== process.env.WEBHOOK_SECRET) {
-            console.warn('⚠️ Invalid webhook secret');
-            return res.status(401).json({ error: 'Invalid webhook secret' });
+        if (event.type === 'payment-created' || event.type === 'payment.succeeded') {
+            await handlePaymentCreated(event.data);
         }
-
-        // Handle different event types
-        switch (event.type) {
-            case 'payment-created':
-            case 'payment.succeeded':
-                await handlePinchPayment(event.data);
-                break;
-
-            case 'payment.failed':
-                console.log('💳 Pinch payment failed:', event.data.id);
-                break;
-
-            default:
-                console.log(`📌 Unhandled event type: ${event.type}`);
-        }
-
-        res.status(200).json({ received: true });
-
+        res.json({ received: true });
     } catch (error) {
-        console.error('❌ Webhook processing error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
-
-// ----- Test webhook endpoint -----
-router.post('/test', async (req, res) => {
-    console.log('🧪 Test webhook received:', req.body);
-
-    try {
-        const result = await handlePinchPayment(req.body);
-        res.status(200).json({
-            success: true,
-            message: 'Test payment processed',
-            result
-        });
-    } catch (error) {
-        console.error('❌ Test webhook failed:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// ----- Legacy Stripe webhook support -----
-router.post('/stripe', async (req, res) => {
-    console.log('📨 Stripe webhook received:', req.body);
-
+router.post('/test', async (req, res) => {
     try {
-        const event = req.body;
-
-        // Handle Stripe invoice events
-        if (event.type === 'invoice.payment_succeeded') {
-            const paymentData = {
-                id: event.data.object.id,
-                amount: event.data.object.total,
-                currency: event.data.object.currency,
-                payer: {
-                    emailAddress: event.data.object.customer_email || 'customer@example.com',
-                    firstName: 'Store',
-                    lastName: 'Customer'
-                }
-            };
-            await handlePinchPayment(paymentData);
-        }
-
-        res.status(200).json({ received: true });
-
+        const result = await handlePaymentCreated(req.body);
+        res.json({ success: true, result });
     } catch (error) {
-        console.error('❌ Stripe webhook error:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(500).json({ error: error.message });
     }
 });
 
-// ----- EXPORT -----
 module.exports = router;
-module.exports.handlePaymentCreated = handlePinchPayment;
+module.exports.handlePaymentCreated = handlePaymentCreated;
