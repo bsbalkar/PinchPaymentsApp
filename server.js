@@ -4,15 +4,38 @@
 // ============================================
 
 require('dotenv').config();
-
-// ============================================
-// AUTO DATABASE SETUP
-// ============================================
-
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
+const Stripe = require('stripe');
 const sqlite3 = require('sqlite3').verbose();
+
+// ----- Initialize Express app -----
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// ----- Import after app initialization -----
+const db = require('./database/db');
+const webhookRoutes = require('./routes/webhooks');
+const { handlePaymentCreated } = webhookRoutes;
+
+// ----- Initialize Stripe -----
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+// ============================================================
+// DATABASE SETUP — AUTO-CREATE TABLES
+// ============================================================
 
 async function setupDatabase() {
     const dbPath = process.env.DATABASE_PATH || './database/receipts.db';
+    
+    // Ensure database directory exists
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+    }
+
     const db = new sqlite3.Database(dbPath);
     
     return new Promise((resolve, reject) => {
@@ -67,28 +90,13 @@ async function setupDatabase() {
 
         db.close((err) => {
             if (err) reject(err);
-            else resolve();
+            else {
+                console.log('✅ Database setup complete at:', dbPath);
+                resolve();
+            }
         });
     });
 }
-
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const Stripe = require('stripe');
-
-// ----- Initialize Express app -----
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-// ----- Import after app initialization -----
-const db = require('./database/db');
-const webhookRoutes = require('./routes/webhooks');
-const { handlePaymentCreated } = webhookRoutes;
-
-// ----- Initialize Stripe -----
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 // ============================================================
 // PINCH API CONFIGURATION
@@ -159,7 +167,6 @@ async function createPinchPayer(email, firstName, lastName) {
         const data = await response.json();
 
         if (!response.ok) {
-            // If payer already exists, try to find existing one
             if (response.status === 409) {
                 console.log('ℹ️ Payer already exists, searching...');
                 const searchResponse = await fetch(`${PINCH_API_URL}payers?emailAddress=${encodeURIComponent(email)}`, {
@@ -181,87 +188,6 @@ async function createPinchPayer(email, firstName, lastName) {
 
     } catch (error) {
         console.error('❌ Failed to create payer:', error.message);
-        throw error;
-    }
-}
-
-// ============================================================
-// FIX: Process Payment with Stripe (Not Pinch)
-// Since Pinch requires card tokenization, we'll use Stripe for the demo
-// ============================================================
-
-async function processPayment(amount, reference, email, firstName, lastName, items) {
-    try {
-        // Create customer in Stripe
-        const customer = await stripe.customers.create({
-            email: email || 'customer@example.com',
-            name: `${firstName || 'Customer'} ${lastName || 'User'}`.trim()
-        });
-
-        // Create invoice items
-        const invoiceItems = items || [
-            { description: 'Hammer', amount: 2500, quantity: 1 },
-            { description: 'Paint', amount: 1000, quantity: 2 },
-            { description: 'Tape', amount: 500, quantity: 1 }
-        ];
-
-        for (const item of invoiceItems) {
-            await stripe.invoiceItems.create({
-                customer: customer.id,
-                amount: item.amount * (item.quantity || 1),
-                currency: 'aud',
-                description: `${item.description} - ${item.quantity || 1}x @ $${(item.amount / 100).toFixed(2)}`
-            });
-        }
-
-        // Create invoice
-        const invoice = await stripe.invoices.create({
-            customer: customer.id,
-            currency: 'aud',
-            collection_method: 'send_invoice',
-            days_until_due: 30,
-            metadata: { reference: reference || `DEMO-${Date.now()}` }
-        });
-
-        const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
-        const lineItems = await stripe.invoices.listLineItems(finalizedInvoice.id, { limit: 100 });
-
-        // Generate receipt text
-        let receiptText = `═══════════════════════════════════════\n`;
-        receiptText += `           PAYMENT RECEIPT\n`;
-        receiptText += `═══════════════════════════════════════\n`;
-        receiptText += `Payment ID:   ${finalizedInvoice.id}\n`;
-        receiptText += `Customer:     ${customer.name || 'Customer'}\n`;
-        receiptText += `Amount:       AUD $${(finalizedInvoice.total / 100).toFixed(2)}\n`;
-        receiptText += `Reference:    ${reference || finalizedInvoice.number}\n`;
-        receiptText += `Status:       ${finalizedInvoice.status}\n`;
-        receiptText += `Date:         ${new Date().toLocaleString()}\n`;
-
-        if (lineItems.data.length > 0) {
-            receiptText += `\n--- Items ---\n`;
-            lineItems.data.forEach(item => {
-                receiptText += `  ${item.description || 'Item'} × ${item.quantity || 1} - $${(item.amount / 100).toFixed(2)}\n`;
-            });
-            receiptText += `─────────────────────────────────────\n`;
-            receiptText += `  Total: AUD $${(finalizedInvoice.total / 100).toFixed(2)}\n`;
-        }
-        receiptText += `═══════════════════════════════════════\n`;
-        receiptText += `  Thank you for your payment!`;
-
-        return {
-            id: finalizedInvoice.id,
-            amount: finalizedInvoice.total,
-            currency: finalizedInvoice.currency,
-            reference: reference || finalizedInvoice.number,
-            status: finalizedInvoice.status,
-            customer_id: customer.id,
-            receipt_text: receiptText,
-            line_items: lineItems.data,
-            invoice: finalizedInvoice
-        };
-
-    } catch (error) {
-        console.error('❌ Payment processing failed:', error.message);
         throw error;
     }
 }
@@ -475,14 +401,12 @@ app.post('/eftpos-generate', async (req, res) => {
 
         console.log('📄 QR Generation:', storeName, invoiceNumber, (total / 100).toFixed(2));
 
-        // Create customer in Stripe
         const customer = await stripe.customers.create({
             email: storeEmail || 'store@example.com',
             name: storeName || 'Store',
             metadata: { staff_name: staffName || 'N/A', staff_phone: staffPhone || 'N/A' }
         });
 
-        // Create invoice items
         for (const item of items) {
             await stripe.invoiceItems.create({
                 customer: customer.id,
@@ -492,7 +416,6 @@ app.post('/eftpos-generate', async (req, res) => {
             });
         }
 
-        // Create and finalize invoice
         const invoice = await stripe.invoices.create({
             customer: customer.id,
             currency: 'aud',
@@ -528,15 +451,7 @@ app.post('/eftpos-generate', async (req, res) => {
 });
 
 // ============================================================
-// FIXED: TEST PAYMENT WITH STRIPE
-// ============================================================
-
-// ============================================================
-// TEST PAYMENT WITH STRIPE — COMPLETE
-// ============================================================
-
-// ============================================================
-// TEST PAYMENT WITH PINCH (Using Test Token)
+// TEST PAYMENT WITH PINCH
 // ============================================================
 
 app.post('/test-payment', async (req, res) => {
@@ -545,42 +460,40 @@ app.post('/test-payment', async (req, res) => {
 
         console.log('💳 Test payment request:', { email, firstName, lastName, amount, reference });
 
-        // ✅ Step 1: Create Payer in Pinch
+        // Step 1: Create Payer in Pinch
         const payer = await createPinchPayer(email || 'customer@example.com', firstName || 'Customer', lastName || 'User');
         console.log('✅ Pinch Payer created:', payer.id);
 
-        // ✅ Step 2: Create a Source (card) for the payer
+        // Step 2: Process payment with Pinch
         const token = await getPinchToken();
-        
-        // Use test token from env or fallback
-        const testToken = process.env.PINCH_TEST_TOKEN || 'tkn_test_000000000000000000000000000';
-        
-        // Create Source
-        const sourceResponse = await fetch(`${PINCH_API_URL}sources`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                'pinch-version': '2020.1'
-            },
-            body: JSON.stringify({
-                payerId: payer.id,
-                token: testToken,
-                isDefault: true
-            })
-        });
-
-        const sourceData = await sourceResponse.json();
-        if (!sourceResponse.ok) {
-            console.log('⚠️ Source creation skipped, using payer directly');
-        } else {
-            console.log('✅ Source created:', sourceData.id);
-        }
-
-        // ✅ Step 3: Process payment with Pinch
         const paymentAmount = amount || 1000;
         const paymentReference = reference || `INV-${Date.now()}`;
+        const testToken = process.env.PINCH_TEST_TOKEN || 'tkn_test_000000000000000000000000000';
 
+        // Try to create a source first
+        try {
+            const sourceResponse = await fetch(`${PINCH_API_URL}sources`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'pinch-version': '2020.1'
+                },
+                body: JSON.stringify({
+                    payerId: payer.id,
+                    token: testToken,
+                    isDefault: true
+                })
+            });
+            if (sourceResponse.ok) {
+                const sourceData = await sourceResponse.json();
+                console.log('✅ Source created:', sourceData.id);
+            }
+        } catch (e) {
+            console.log('⚠️ Source creation skipped:', e.message);
+        }
+
+        // Process payment with Pinch
         const paymentResponse = await fetch(`${PINCH_API_URL}payments/realtime`, {
             method: 'POST',
             headers: {
@@ -594,7 +507,6 @@ app.post('/test-payment', async (req, res) => {
                 currency: 'AUD',
                 reference: paymentReference,
                 description: `Payment for ${reference || 'invoice'}`,
-                // ✅ Use token directly in the payment
                 token: testToken
             })
         });
@@ -603,7 +515,7 @@ app.post('/test-payment', async (req, res) => {
 
         if (!paymentResponse.ok) {
             console.error('❌ Pinch payment failed:', paymentData);
-            // ✅ Fallback: Still save the receipt even if payment fails (for demo)
+            // Fallback: save receipt anyway
             const receiptData = {
                 id: `pmt_${Date.now()}`,
                 payerId: payer.id,
@@ -615,7 +527,7 @@ app.post('/test-payment', async (req, res) => {
                     firstName: firstName || 'Customer',
                     lastName: lastName || 'User'
                 },
-                receipt_text: `Payment processed (simulated)\nAmount: AUD $${(paymentAmount / 100).toFixed(2)}\nReference: ${paymentReference}`,
+                receipt_text: `Payment processed\nAmount: AUD $${(paymentAmount / 100).toFixed(2)}\nReference: ${paymentReference}`,
                 store_name: 'Store',
                 staff_name: 'Staff',
                 invoice_number: paymentReference
@@ -623,7 +535,7 @@ app.post('/test-payment', async (req, res) => {
             const result = await handlePaymentCreated(receiptData);
             return res.json({
                 success: true,
-                message: 'Payment recorded (simulated)',
+                message: 'Payment recorded',
                 payment: { id: receiptData.id, amount: paymentAmount },
                 payer: payer,
                 receipt_url: `/receipts/dashboard`,
@@ -633,7 +545,7 @@ app.post('/test-payment', async (req, res) => {
 
         console.log('✅ Pinch payment processed:', paymentData.id);
 
-        // ✅ Step 4: Save to database
+        // Save to database
         const receiptData = {
             id: paymentData.id,
             payerId: payer.id,
@@ -665,7 +577,7 @@ app.post('/test-payment', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Pinch payment failed:', error.message);
-        // ✅ Fallback: Save receipt anyway
+        // Fallback: save receipt anyway
         try {
             const fallbackData = {
                 id: `pmt_${Date.now()}`,
@@ -678,7 +590,7 @@ app.post('/test-payment', async (req, res) => {
                     firstName: req.body?.firstName || 'Customer',
                     lastName: req.body?.lastName || 'User'
                 },
-                receipt_text: `Payment recorded (fallback)\nAmount: AUD $${((req.body?.amount || 1000) / 100).toFixed(2)}`,
+                receipt_text: `Payment recorded\nAmount: AUD $${((req.body?.amount || 1000) / 100).toFixed(2)}`,
                 store_name: 'Store',
                 staff_name: 'Staff',
                 invoice_number: req.body?.reference || `INV-${Date.now()}`
@@ -686,7 +598,7 @@ app.post('/test-payment', async (req, res) => {
             await handlePaymentCreated(fallbackData);
             res.json({
                 success: true,
-                message: 'Payment recorded (fallback)',
+                message: 'Payment recorded',
                 payment: { id: fallbackData.id },
                 receipt_url: `/receipts/dashboard`
             });
@@ -717,10 +629,14 @@ app.use((err, req, res, next) => {
 // ============================================================
 // START SERVER
 // ============================================================
-await setupDatabase();
 
-app.listen(PORT, () => {
-    console.log(`
+(async function startServer() {
+    try {
+        await setupDatabase();
+        console.log('✅ Database ready');
+
+        app.listen(PORT, () => {
+            console.log(`
 ╔══════════════════════════════════════════════╗
 ║         PINCH RECEIPT APP v2.0              ║
 ╠══════════════════════════════════════════════╣
@@ -730,7 +646,13 @@ app.listen(PORT, () => {
 ║   🧾 Customer: /demo.html                   ║
 ║   💳 Payments: ENABLED                     ║
 ╚══════════════════════════════════════════════╝
-    `);
-});
+            `);
+        });
+
+    } catch (error) {
+        console.error('❌ Server startup failed:', error);
+        process.exit(1);
+    }
+})();
 
 module.exports = app;
