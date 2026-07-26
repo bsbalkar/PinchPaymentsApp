@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pinch Receipt - Customer</title>
+    <!-- Load QR Scanner Library -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -87,7 +89,6 @@
         .step.error .step-content { display: block; }
 
         .label { font-size: 11px; color: #666; margin-bottom: 4px; font-weight: 500; }
-        .value { font-size: 14px; color: #1a1a1a; }
 
         input[type="text"] {
             width: 100%;
@@ -117,21 +118,54 @@
         .btn-success:hover { background: #388e3c; }
         .btn-outline { background: transparent; color: #1a237e; border: 2px solid #1a237e; }
         .btn-outline:hover { background: #1a237e; color: white; }
+        .btn-danger { background: #e94560; }
+        .btn-danger:hover { background: #c62828; }
 
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .two-col .qr-box {
-            text-align: center;
-            border: 2px dashed #ddd;
-            border-radius: 8px;
-            padding: 16px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100px;
+
+        /* QR Scanner Container */
+        #qrScannerContainer {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 12px 0;
+            display: none;
+            position: relative;
+            min-height: 250px;
         }
-        .qr-box .icon { font-size: 36px; }
-        .qr-box .hint { font-size: 11px; color: #999; margin-top: 4px; }
+        #qrScannerContainer.active { display: block; }
+        #qrScannerContainer video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #qrScannerContainer .scanner-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 70%;
+            border: 2px solid rgba(255,255,255,0.6);
+            border-radius: 12px;
+            box-shadow: 0 0 0 4000px rgba(0,0,0,0.4);
+            pointer-events: none;
+        }
+        #qrScannerContainer .scanner-line {
+            position: absolute;
+            top: 20%;
+            left: 15%;
+            width: 70%;
+            height: 2px;
+            background: #4fc3f7;
+            box-shadow: 0 0 20px #4fc3f7;
+            animation: scan 2s ease-in-out infinite;
+        }
+        @keyframes scan {
+            0% { top: 20%; }
+            50% { top: 70%; }
+            100% { top: 20%; }
+        }
 
         .data-box {
             background: #f5f7fa;
@@ -186,16 +220,44 @@
 
         .mt-8 { margin-top: 8px; }
         .mt-12 { margin-top: 12px; }
-        .mb-8 { margin-bottom: 8px; }
         .text-sm { font-size: 13px; color: #666; }
         .text-center { text-align: center; }
         .flex { display: flex; gap: 8px; flex-wrap: wrap; }
-        .flex-center { align-items: center; justify-content: center; }
 
         .badge-green { background: #e8f5e9; color: #2e7d32; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
         .badge-orange { background: #fff3e0; color: #e65100; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 
         .hidden { display: none !important; }
+        .status-text { font-size: 13px; color: #666; margin: 8px 0; }
+
+        #qrScannerContainer .scan-controls {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+        }
+        #qrScannerContainer .scan-controls .btn {
+            width: auto;
+            padding: 8px 20px;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+        }
+        #qrScannerContainer .scan-controls .btn:hover { background: rgba(0,0,0,0.9); }
+
+        .receipt-preview {
+            background: #f5f7fa;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
@@ -206,9 +268,7 @@
         <span class="badge">Customer</span>
     </div>
 
-    <!-- ========================================== -->
-    <!-- STEP 1: SCAN QR -->
-    <!-- ========================================== -->
+    <!-- Step 1: Scan QR -->
     <div class="step active" id="step1">
         <div class="step-header">
             <span class="step-number">1</span>
@@ -218,16 +278,23 @@
         <div class="step-content">
             <p class="text-sm">Scan the QR code from the EFTPOS device</p>
 
+            <!-- QR Scanner -->
+            <div id="qrScannerContainer">
+                <div id="qrScanner" style="position:relative; min-height:250px;">
+                    <div class="scanner-overlay"></div>
+                    <div class="scanner-line"></div>
+                </div>
+                <div class="scan-controls">
+                    <button class="btn" id="startScannerBtn">📸 Start Camera</button>
+                    <button class="btn btn-danger" id="stopScannerBtn" style="display:none;">✕ Stop</button>
+                </div>
+            </div>
+
             <div class="two-col">
                 <div>
-                    <div class="label">Invoice ID</div>
+                    <div class="label">Or enter Invoice ID manually</div>
                     <input type="text" id="invoiceIdInput" placeholder="e.g., in_xxx">
                     <button class="btn" id="fetchBtn">🔍 Fetch Invoice</button>
-                </div>
-                <div class="qr-box">
-                    <div class="icon">📷</div>
-                    <div class="hint">Tap to scan QR</div>
-                    <button class="btn btn-outline" id="scanBtn" style="font-size:12px;padding:6px 12px;width:auto;">📸 Scan</button>
                 </div>
             </div>
 
@@ -238,9 +305,7 @@
         </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- STEP 2: INVOICE DETAILS -->
-    <!-- ========================================== -->
+    <!-- Step 2: Invoice Details -->
     <div class="step" id="step2">
         <div class="step-header">
             <span class="step-number">2</span>
@@ -259,9 +324,7 @@
         </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- STEP 3: PAYMENT RESULT -->
-    <!-- ========================================== -->
+    <!-- Step 3: Payment Result -->
     <div class="step" id="step3">
         <div class="step-header">
             <span class="step-number">3</span>
@@ -280,9 +343,7 @@
         </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- STEP 4: RECEIPT -->
-    <!-- ========================================== -->
+    <!-- Step 4: Receipt -->
     <div class="step" id="step4">
         <div class="step-header">
             <span class="step-number">4</span>
@@ -291,7 +352,7 @@
         </div>
         <div class="step-content">
             <div id="receiptContent" class="hidden">
-                <div class="receipt-preview" id="receiptText" style="background:#f5f7fa;padding:12px;border-radius:8px;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:300px;overflow-y:auto;"></div>
+                <div class="receipt-preview" id="receiptText"></div>
                 <button class="btn mt-12" id="viewReceiptBtn">📄 View Full PDF</button>
             </div>
             <div id="receiptWaiting">
@@ -318,6 +379,8 @@
 
     const $ = id => document.getElementById(id);
     const BASE_URL = window.location.origin;
+    let html5QrCode = null;
+    let scannerRunning = false;
 
     // ============================================================
     // TOAST
@@ -355,46 +418,102 @@
     }
 
     // ============================================================
-    // STEP 1: SCAN QR / FETCH INVOICE
+    // QR SCANNER
     // ============================================================
+    $('startScannerBtn').addEventListener('click', startScanner);
+    $('stopScannerBtn').addEventListener('click', stopScanner);
 
-    // ----- Fetch Invoice -----
-    $('fetchBtn').addEventListener('click', async () => {
+    function startScanner() {
+        const container = $('qrScannerContainer');
+        container.classList.add('active');
+
+        // Check if browser supports camera
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            showToast('📷 Camera not supported on this browser', 'error');
+            showManualEntry();
+            return;
+        }
+
+        $('startScannerBtn').style.display = 'none';
+        $('stopScannerBtn').style.display = 'inline-block';
+
+        try {
+            html5QrCode = new Html5Qrcode("qrScanner");
+
+            html5QrCode.start(
+                { facingMode: "environment" },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                },
+                onScanSuccess,
+                onScanError
+            ).then(() => {
+                scannerRunning = true;
+                showToast('📷 Camera started. Scan the QR code.', 'success');
+            }).catch((err) => {
+                console.error('Camera error:', err);
+                showToast('❌ Could not start camera. Please enter Invoice ID manually.', 'error');
+                showManualEntry();
+                stopScanner();
+            });
+
+        } catch (error) {
+            console.error('Scanner error:', error);
+            showToast('❌ QR scanner not available. Enter Invoice ID manually.', 'error');
+            showManualEntry();
+        }
+    }
+
+    function stopScanner() {
+        if (html5QrCode && scannerRunning) {
+            html5QrCode.stop().then(() => {
+                scannerRunning = false;
+                $('qrScannerContainer').classList.remove('active');
+                $('startScannerBtn').style.display = 'inline-block';
+                $('stopScannerBtn').style.display = 'none';
+                showToast('📷 Camera stopped', '');
+            }).catch(() => {});
+        } else {
+            $('qrScannerContainer').classList.remove('active');
+            $('startScannerBtn').style.display = 'inline-block';
+            $('stopScannerBtn').style.display = 'none';
+        }
+    }
+
+    function showManualEntry() {
+        $('invoiceIdInput').focus();
+        $('invoiceIdInput').placeholder = 'Enter Invoice ID here...';
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+        // Decoded text is the Invoice ID
+        stopScanner();
+        $('invoiceIdInput').value = decodedText;
+        fetchInvoice(decodedText);
+        showToast('✅ QR scanned successfully!', 'success');
+    }
+
+    function onScanError(errorMessage) {
+        // Ignore - QR scanner continuously scans
+    }
+
+    // ============================================================
+    // FETCH INVOICE
+    // ============================================================
+    $('fetchBtn').addEventListener('click', () => {
         const invoiceId = $('invoiceIdInput').value.trim();
         if (!invoiceId) {
             showToast('Please enter an Invoice ID', 'error');
             return;
         }
-        await fetchInvoice(invoiceId);
+        fetchInvoice(invoiceId);
     });
 
     $('invoiceIdInput').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') $('fetchBtn').click();
     });
 
-    // ----- Scan QR (Mobile) -----
-    $('scanBtn').addEventListener('click', () => {
-        // Mobile QR scanner fallback
-        if ('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices) {
-            // For production, use a proper QR library
-            showToast('📷 Please use a QR scanning app to scan the code', '');
-            // Simple fallback: paste invoice ID
-            const pasted = prompt('📷 Scan the QR code and paste the Invoice ID:');
-            if (pasted && pasted.trim()) {
-                $('invoiceIdInput').value = pasted.trim();
-                $('fetchBtn').click();
-            }
-        } else {
-            // Desktop fallback
-            const manual = prompt('📷 Enter the Invoice ID from the QR code:');
-            if (manual && manual.trim()) {
-                $('invoiceIdInput').value = manual.trim();
-                $('fetchBtn').click();
-            }
-        }
-    });
-
-    // ----- Fetch Invoice from Stripe -----
     async function fetchInvoice(invoiceId) {
         updateStep('step1', '⏳ Fetching...', 'loading');
 
@@ -415,7 +534,6 @@
                 currency: data.invoice.currency?.toUpperCase()
             }, null, 2);
 
-            // Display invoice details
             displayInvoice(data);
 
             updateStep('step1', '✅ Invoice Found', 'done');
@@ -432,7 +550,7 @@
     }
 
     // ============================================================
-    // STEP 2: DISPLAY INVOICE
+    // DISPLAY INVOICE
     // ============================================================
     function displayInvoice(data) {
         const invoice = data.invoice;
@@ -477,7 +595,7 @@
     }
 
     // ============================================================
-    // STEP 3: PAY NOW
+    // PAY NOW
     // ============================================================
     $('payBtn').addEventListener('click', async () => {
         if (!state.invoiceData) {
@@ -494,7 +612,6 @@
             const invoice = state.invoiceData.invoice;
             const lineItems = state.invoiceData.line_items || [];
 
-            // Call test-payment endpoint
             const response = await fetch(`${BASE_URL}/test-payment`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -517,7 +634,6 @@
 
             state.paymentId = data.data?.id || data.result?.paymentId;
 
-            // Show payment result
             updateStep('step2', '✅ Paid', 'done');
             updateStep('step3', '✅ Done', 'done');
             $('paymentWaiting').classList.add('hidden');
@@ -543,13 +659,12 @@
     });
 
     // ============================================================
-    // STEP 4: GENERATE RECEIPT
+    // GENERATE RECEIPT
     // ============================================================
     $('receiptBtn').addEventListener('click', async () => {
         updateStep('step3', '⏳ Generating...', 'loading');
 
         try {
-            // Fetch the latest receipt from the database
             const response = await fetch(`${BASE_URL}/receipts`);
             const data = await response.json();
 
@@ -561,9 +676,7 @@
             state.receiptData = latest;
             state.pdfUrl = latest.pdf_url;
 
-            // Show receipt text
-            const receiptText = latest.receipt_text || 'Receipt generated';
-            $('receiptText').textContent = receiptText;
+            $('receiptText').textContent = latest.receipt_text || 'Receipt generated';
 
             updateStep('step3', '✅ Done', 'done');
             updateStep('step4', '📄 Ready', 'ready');
@@ -578,7 +691,9 @@
         }
     });
 
-    // ----- View PDF -----
+    // ============================================================
+    // VIEW PDF
+    // ============================================================
     $('viewReceiptBtn').addEventListener('click', () => {
         if (state.pdfUrl) {
             window.open(`${BASE_URL}${state.pdfUrl}`, '_blank');
@@ -595,7 +710,7 @@
     // ============================================================
     console.log('🧾 Pinch Receipt - Customer App loaded');
     console.log('📍 BASE_URL:', BASE_URL);
-    console.log('💡 Scan the QR code from the EFTPOS device');
+    console.log('💡 Click "Start Camera" to scan QR code');
 
     updateStep('step1', '⏳ Ready', 'ready');
     updateStep('step2', '⏳ Waiting', '');
