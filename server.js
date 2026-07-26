@@ -22,6 +22,99 @@ const { handlePaymentCreated } = webhookRoutes;
 // ----- Initialize Stripe -----
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
+// ============================================================
+// PINCH API CONFIGURATION
+// ============================================================
+
+const PINCH_API_URL = process.env.PINCH_API_URL || 'https://api.getpinch.com.au/test/';
+const APPLICATION_ID = process.env.APPLICATION_ID;
+const SECRET_KEY = process.env.SECRET_KEY;
+
+let pinchAccessToken = null;
+let pinchTokenExpiry = null;
+
+// ----- Get Pinch Access Token -----
+async function getPinchToken() {
+    if (pinchAccessToken && pinchTokenExpiry && Date.now() < pinchTokenExpiry) {
+        return pinchAccessToken;
+    }
+
+    try {
+        const authString = Buffer.from(`${APPLICATION_ID}:${SECRET_KEY}`).toString('base64');
+
+        const response = await fetch('https://auth.getpinch.com.au/connect/token', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${authString}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'grant_type=client_credentials&scope=api1'
+        });
+
+        const data = await response.json();
+        pinchAccessToken = data.access_token;
+        pinchTokenExpiry = Date.now() + (data.expires_in || 3600) * 1000;
+
+        console.log('✅ Pinch token obtained');
+        return pinchAccessToken;
+
+    } catch (error) {
+        console.error('❌ Failed to get Pinch token:', error);
+        throw error;
+    }
+}
+
+// ----- Create Pinch Payer -----
+async function createPinchPayer(email, firstName, lastName) {
+    const token = await getPinchToken();
+    
+    const response = await fetch(`${PINCH_API_URL}payers`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'pinch-version': '2020.1'
+        },
+        body: JSON.stringify({
+            emailAddress: email || 'customer@example.com',
+            firstName: firstName || 'Customer',
+            lastName: lastName || 'User'
+        })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Failed to create payer');
+    return data;
+}
+
+// ----- Process Payment with Pinch API -----
+async function processPinchPayment(payerId, amount, reference, description = 'Payment') {
+    const token = await getPinchToken();
+    
+    const response = await fetch(`${PINCH_API_URL}payments/realtime`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'pinch-version': '2020.1'
+        },
+        body: JSON.stringify({
+            payerId: payerId,
+            amount: amount,
+            currency: 'AUD',
+            reference: reference || `PAY-${Date.now()}`,
+            description: description,
+            source: {
+                type: 'card'
+            }
+        })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'Payment failed');
+    return data;
+}
+
 // ----- Middleware -----
 app.use(cors());
 app.use(express.json());
@@ -65,7 +158,7 @@ app.get('/', (req, res) => {
             'GET /receipts/dashboard — Dashboard',
             'GET /receipts — All receipts (JSON)',
             'GET /stats — Stats',
-            'POST /test-payment — Test payment',
+            'POST /test-payment — Test payment with Pinch',
             'POST /webhooks/pinch — Pinch webhook',
             'GET /stripe/invoice/:invoiceId — Fetch Stripe invoice',
             'POST /eftpos-generate — Generate QR invoice',
@@ -208,7 +301,7 @@ app.post('/eftpos-generate', async (req, res) => {
 
         console.log('📄 QR Generation:', storeName, invoiceNumber, total / 100);
 
-        // Create customer
+        // Create customer in Stripe
         const customer = await stripe.customers.create({
             email: storeEmail || 'store@example.com',
             name: storeName || 'Store',
@@ -252,83 +345,75 @@ app.post('/eftpos-generate', async (req, res) => {
 });
 
 // ============================================================
-// TEST PAYMENT
+// TEST PAYMENT WITH PINCH API
 // ============================================================
 
 app.post('/test-payment', async (req, res) => {
     try {
         const { email, firstName, lastName, amount, reference, items } = req.body;
 
-        let customer;
-        const customers = await stripe.customers.list({ email: email || 'test@example.com', limit: 1 });
-        if (customers.data.length > 0) {
-            customer = customers.data[0];
-        } else {
-            customer = await stripe.customers.create({
-                email: email || 'test@example.com',
-                name: `${firstName || 'Test'} ${lastName || 'User'}`.trim()
-            });
-        }
+        // Create Payer in Pinch
+        const payer = await createPinchPayer(email, firstName, lastName);
+        console.log('✅ Payer created:', payer.id);
 
-        const invoiceItems = items || [
-            { description: 'Hammer', amount: 2500, quantity: 1 },
-            { description: 'Paint', amount: 1000, quantity: 2 },
-            { description: 'Tape', amount: 500, quantity: 1 }
-        ];
-
-        for (const item of invoiceItems) {
-            await stripe.invoiceItems.create({
-                customer: customer.id,
-                amount: item.amount * (item.quantity || 1),
-                currency: 'aud',
-                description: `${item.description} - ${item.quantity || 1}x @ $${(item.amount / 100).toFixed(2)}`
-            });
-        }
-
-        const invoice = await stripe.invoices.create({
-            customer: customer.id,
-            currency: 'aud',
-            collection_method: 'send_invoice',
-            days_until_due: 30,
-            metadata: { reference: reference || `DEMO-${Date.now()}` }
-        });
-
-        const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
-        const lineItems = await stripe.invoices.listLineItems(finalizedInvoice.id, { limit: 100 });
+        // Process payment with Pinch
+        const payment = await processPinchPayment(
+            payer.id,
+            amount || 1000,
+            reference || `INV-${Date.now()}`,
+            `Payment for ${reference || 'invoice'}`
+        );
+        console.log('✅ Payment processed:', payment.id);
 
         // Generate receipt text
-        let receiptText = `STORE RECEIPT\nInvoice: ${finalizedInvoice.number || 'N/A'}\nDate: ${new Date().toLocaleString()}\n\nItems:\n`;
-        lineItems.data.forEach(item => {
-            receiptText += `  ${item.description || 'Item'} - $${(item.amount / 100).toFixed(2)}\n`;
-        });
-        receiptText += `\nTotal: $${(finalizedInvoice.total / 100).toFixed(2)}`;
+        let receiptText = `PINCH RECEIPT\n`;
+        receiptText += `Payment ID: ${payment.id}\n`;
+        receiptText += `Payer: ${firstName || 'Customer'} ${lastName || ''}\n`;
+        receiptText += `Amount: AUD $${(payment.amount / 100).toFixed(2)}\n`;
+        receiptText += `Reference: ${payment.reference || reference}\n`;
+        receiptText += `Status: ${payment.status || 'approved'}\n`;
+        receiptText += `Date: ${new Date().toLocaleString()}\n`;
+        
+        if (items && items.length > 0) {
+            receiptText += `\nItems:\n`;
+            items.forEach(item => {
+                receiptText += `  ${item.description || 'Item'} × ${item.quantity || 1} - $${(item.amount / 100).toFixed(2)}\n`;
+            });
+        }
 
+        // Save to database
         const receiptData = {
-            id: finalizedInvoice.id,
-            payerId: customer.id,
-            amount: finalizedInvoice.total,
-            currency: finalizedInvoice.currency,
-            reference: reference || finalizedInvoice.number,
-            payer: { emailAddress: customer.email, firstName: customer.name?.split(' ')[0] || 'Test', lastName: customer.name?.split(' ')[1] || 'User' },
+            id: payment.id,
+            payerId: payer.id,
+            amount: payment.amount,
+            currency: payment.currency || 'AUD',
+            reference: payment.reference || reference,
+            payer: {
+                emailAddress: payer.emailAddress || email,
+                firstName: payer.firstName || firstName,
+                lastName: payer.lastName || lastName
+            },
             receipt_text: receiptText,
-            stripe_invoice: finalizedInvoice,
-            line_items: lineItems.data
+            pinch_payment: payment
         };
 
         const result = await handlePaymentCreated(receiptData);
 
         res.json({
             success: true,
-            message: 'Payment processed',
-            data: receiptData,
-            result,
-            invoice_url: `/stripe/invoice/${finalizedInvoice.id}`,
-            receipt_url: '/receipts/dashboard'
+            message: 'Payment processed with Pinch API',
+            payment: payment,
+            payer: payer,
+            receipt_url: `/receipts/dashboard`,
+            result: result
         });
 
     } catch (error) {
-        console.error('❌ Test payment failed:', error);
-        res.status(500).json({ error: error.message });
+        console.error('❌ Pinch payment failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Payment processing failed'
+        });
     }
 });
 
@@ -360,6 +445,7 @@ app.listen(PORT, () => {
 ║   📊 Dashboard: /receipts/dashboard         ║
 ║   📱 EFTPOS: /eftpos.html                   ║
 ║   🧾 Customer: /demo.html                   ║
+║   💳 Pinch Payments: ENABLED               ║
 ╚══════════════════════════════════════════════╝
     `);
 });

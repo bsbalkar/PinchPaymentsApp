@@ -1,6 +1,6 @@
 // ============================================
 // routes/webhooks.js
-// PURPOSE: Handle Pinch webhook events
+// PURPOSE: Handle webhooks from Pinch and Stripe
 // ============================================
 
 const express = require('express');
@@ -8,13 +8,13 @@ const router = express.Router();
 const db = require('../database/db');
 const { generateReceipt } = require('../services/pdfGenerator');
 
-// ----- Handle payment created event -----
-async function handlePaymentCreated(paymentData) {
-    console.log('💳 Processing payment:', paymentData.id);
+// ----- Handle Pinch payment created event -----
+async function handlePinchPayment(paymentData) {
+    console.log('💳 Pinch payment received:', paymentData.id);
 
     try {
         // 1. Save receipt to database
-        const result = await db.saveReceiptFromWebhook(paymentData);
+        const result = await db.saveReceiptFromPinch(paymentData);
         console.log('✅ Receipt saved to database');
 
         // 2. Get the full receipt record
@@ -34,9 +34,7 @@ async function handlePaymentCreated(paymentData) {
             pdfResult.pdfUrl
         );
 
-        // 5. PDF is now available at the URL
-        console.log(`📄 PDF available at: ${pdfResult.pdfUrl}`);
-        console.log(`✅ Complete: Payment ${paymentData.id} processed`);
+        console.log(`✅ Complete: Pinch payment ${paymentData.id} processed`);
 
         return {
             success: true,
@@ -46,14 +44,14 @@ async function handlePaymentCreated(paymentData) {
         };
 
     } catch (error) {
-        console.error('❌ Error processing payment:', error);
+        console.error('❌ Error processing Pinch payment:', error);
         throw error;
     }
 }
 
-// ----- Webhook endpoint for Pinch -----
+// ----- Webhook endpoint -----
 router.post('/pinch', async (req, res) => {
-    console.log('📨 Webhook received:', req.body);
+    console.log('📨 Pinch webhook received:', req.body);
 
     try {
         const event = req.body;
@@ -69,11 +67,11 @@ router.post('/pinch', async (req, res) => {
         switch (event.type) {
             case 'payment-created':
             case 'payment.succeeded':
-                await handlePaymentCreated(event.data);
+                await handlePinchPayment(event.data);
                 break;
 
             case 'payment.failed':
-                console.log('💳 Payment failed:', event.data.id);
+                console.log('💳 Pinch payment failed:', event.data.id);
                 break;
 
             default:
@@ -88,12 +86,12 @@ router.post('/pinch', async (req, res) => {
     }
 });
 
-// ----- Test endpoint (for manual testing) -----
+// ----- Test webhook endpoint -----
 router.post('/test', async (req, res) => {
     console.log('🧪 Test webhook received:', req.body);
 
     try {
-        const result = await handlePaymentCreated(req.body);
+        const result = await handlePinchPayment(req.body);
         res.status(200).json({
             success: true,
             message: 'Test payment processed',
@@ -105,6 +103,36 @@ router.post('/test', async (req, res) => {
     }
 });
 
-// ----- EXPORT both the router AND the function -----
+// ----- Legacy Stripe webhook support -----
+router.post('/stripe', async (req, res) => {
+    console.log('📨 Stripe webhook received:', req.body);
+
+    try {
+        const event = req.body;
+
+        // Handle Stripe invoice events
+        if (event.type === 'invoice.payment_succeeded') {
+            const paymentData = {
+                id: event.data.object.id,
+                amount: event.data.object.total,
+                currency: event.data.object.currency,
+                payer: {
+                    emailAddress: event.data.object.customer_email || 'customer@example.com',
+                    firstName: 'Store',
+                    lastName: 'Customer'
+                }
+            };
+            await handlePinchPayment(paymentData);
+        }
+
+        res.status(200).json({ received: true });
+
+    } catch (error) {
+        console.error('❌ Stripe webhook error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ----- EXPORT -----
 module.exports = router;
-module.exports.handlePaymentCreated = handlePaymentCreated;
+module.exports.handlePaymentCreated = handlePinchPayment;

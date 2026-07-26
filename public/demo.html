@@ -88,52 +88,18 @@
         .step.completed .step-content,
         .step.error .step-content { display: block; }
 
-        .label { font-size: 11px; color: #666; margin-bottom: 4px; font-weight: 500; }
-
-        input[type="text"] {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-        input[type="text"]:focus { outline: none; border-color: #1a237e; }
-
-        .btn {
-            background: #1a237e;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            width: 100%;
-        }
-        .btn:hover { background: #0d1555; }
-        .btn:disabled { background: #999; cursor: not-allowed; }
-        .btn-success { background: #4caf50; }
-        .btn-success:hover { background: #388e3c; }
-        .btn-outline { background: transparent; color: #1a237e; border: 2px solid #1a237e; }
-        .btn-outline:hover { background: #1a237e; color: white; }
-        .btn-danger { background: #e94560; }
-        .btn-danger:hover { background: #c62828; }
-
-        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
         /* QR Scanner Container */
         #qrScannerContainer {
             background: #000;
             border-radius: 12px;
             overflow: hidden;
             margin: 12px 0;
-            display: none;
             position: relative;
-            min-height: 250px;
+            min-height: 320px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        #qrScannerContainer.active { display: block; }
         #qrScannerContainer video {
             width: 100%;
             height: auto;
@@ -166,6 +132,36 @@
             50% { top: 70%; }
             100% { top: 20%; }
         }
+
+        #qrScannerContainer .scan-placeholder {
+            color: #fff;
+            text-align: center;
+            padding: 40px;
+            font-size: 16px;
+        }
+        #qrScannerContainer .scan-placeholder .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+        #qrScannerContainer .scan-placeholder .sub { font-size: 13px; color: #999; }
+
+        .btn {
+            background: #1a237e;
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+        .btn:hover { background: #0d1555; }
+        .btn:disabled { background: #999; cursor: not-allowed; }
+        .btn-success { background: #4caf50; }
+        .btn-success:hover { background: #388e3c; }
+        .btn-danger { background: #e94560; }
+        .btn-danger:hover { background: #c62828; }
+        .btn-outline { background: transparent; color: #1a237e; border: 2px solid #1a237e; }
+        .btn-outline:hover { background: #1a237e; color: white; }
 
         .data-box {
             background: #f5f7fa;
@@ -222,31 +218,10 @@
         .mt-12 { margin-top: 12px; }
         .text-sm { font-size: 13px; color: #666; }
         .text-center { text-align: center; }
-        .flex { display: flex; gap: 8px; flex-wrap: wrap; }
+        .hidden { display: none !important; }
 
         .badge-green { background: #e8f5e9; color: #2e7d32; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
         .badge-orange { background: #fff3e0; color: #e65100; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-
-        .hidden { display: none !important; }
-        .status-text { font-size: 13px; color: #666; margin: 8px 0; }
-
-        #qrScannerContainer .scan-controls {
-            position: absolute;
-            bottom: 16px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
-            display: flex;
-            gap: 8px;
-        }
-        #qrScannerContainer .scan-controls .btn {
-            width: auto;
-            padding: 8px 20px;
-            font-size: 12px;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(10px);
-        }
-        #qrScannerContainer .scan-controls .btn:hover { background: rgba(0,0,0,0.9); }
 
         .receipt-preview {
             background: #f5f7fa;
@@ -258,6 +233,24 @@
             max-height: 300px;
             overflow-y: auto;
         }
+
+        .scan-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .scan-controls .btn { width: auto; padding: 10px 24px; font-size: 14px; }
+
+        #statusMessage {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 8px;
+        }
+        #statusMessage.success { background: #e8f5e9; color: #2e7d32; }
+        #statusMessage.error { background: #ffebee; color: #c62828; }
     </style>
 </head>
 <body>
@@ -280,28 +273,23 @@
 
             <!-- QR Scanner -->
             <div id="qrScannerContainer">
-                <div id="qrScanner" style="position:relative; min-height:250px;">
-                    <div class="scanner-overlay"></div>
-                    <div class="scanner-line"></div>
-                </div>
-                <div class="scan-controls">
-                    <button class="btn" id="startScannerBtn">📸 Start Camera</button>
-                    <button class="btn btn-danger" id="stopScannerBtn" style="display:none;">✕ Stop</button>
-                </div>
-            </div>
-
-            <div class="two-col">
-                <div>
-                    <div class="label">Or enter Invoice ID manually</div>
-                    <input type="text" id="invoiceIdInput" placeholder="e.g., in_xxx">
-                    <button class="btn" id="fetchBtn">🔍 Fetch Invoice</button>
+                <div id="qrScanner" style="position:relative; min-height:320px; width:100%;">
+                    <div class="scan-placeholder" id="scanPlaceholder">
+                        <span class="icon">📷</span>
+                        Tap "Start Camera" to scan<br>
+                        <span class="sub">QR code from EFTPOS device</span>
+                    </div>
+                    <div class="scanner-overlay" style="display:none;" id="scannerOverlay"></div>
+                    <div class="scanner-line" style="display:none;" id="scannerLine"></div>
                 </div>
             </div>
 
-            <div id="scanResult" class="hidden mt-12">
-                <div class="badge-green">✅ QR Scanned</div>
-                <div class="data-box" id="scanData"></div>
+            <div class="scan-controls">
+                <button class="btn" id="startScannerBtn">📸 Start Camera</button>
+                <button class="btn btn-danger" id="stopScannerBtn" style="display:none;">✕ Stop</button>
             </div>
+
+            <div id="statusMessage"></div>
         </div>
     </div>
 
@@ -418,50 +406,66 @@
     }
 
     // ============================================================
+    // STATUS MESSAGE
+    // ============================================================
+    function setStatus(msg, type = '') {
+        const el = $('statusMessage');
+        el.textContent = msg;
+        el.className = type;
+        if (!msg) el.className = '';
+    }
+
+    // ============================================================
     // QR SCANNER
     // ============================================================
     $('startScannerBtn').addEventListener('click', startScanner);
     $('stopScannerBtn').addEventListener('click', stopScanner);
 
-    function startScanner() {
+    async function startScanner() {
         const container = $('qrScannerContainer');
-        container.classList.add('active');
+        const placeholder = $('scanPlaceholder');
+        const overlay = $('scannerOverlay');
+        const line = $('scannerLine');
 
         // Check if browser supports camera
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            showToast('📷 Camera not supported on this browser', 'error');
-            showManualEntry();
+            setStatus('❌ Camera not supported on this browser. Please use a mobile device.', 'error');
+            showToast('📷 Camera not supported', 'error');
             return;
         }
 
         $('startScannerBtn').style.display = 'none';
         $('stopScannerBtn').style.display = 'inline-block';
+        placeholder.style.display = 'none';
+        overlay.style.display = 'block';
+        line.style.display = 'block';
+        setStatus('📷 Starting camera...', '');
 
         try {
             html5QrCode = new Html5Qrcode("qrScanner");
 
-            html5QrCode.start(
+            const config = {
+                fps: 15,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
+
+            await html5QrCode.start(
                 { facingMode: "environment" },
-                {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
-                },
+                config,
                 onScanSuccess,
                 onScanError
-            ).then(() => {
-                scannerRunning = true;
-                showToast('📷 Camera started. Scan the QR code.', 'success');
-            }).catch((err) => {
-                console.error('Camera error:', err);
-                showToast('❌ Could not start camera. Please enter Invoice ID manually.', 'error');
-                showManualEntry();
-                stopScanner();
-            });
+            );
 
-        } catch (error) {
-            console.error('Scanner error:', error);
-            showToast('❌ QR scanner not available. Enter Invoice ID manually.', 'error');
-            showManualEntry();
+            scannerRunning = true;
+            setStatus('📷 Camera is ready. Point at the QR code.', '');
+            showToast('📷 Camera started. Scan the QR code.', 'success');
+
+        } catch (err) {
+            console.error('Camera error:', err);
+            setStatus('❌ Could not start camera: ' + err.message, 'error');
+            showToast('❌ Could not start camera', 'error');
+            stopScanner();
         }
     }
 
@@ -469,29 +473,40 @@
         if (html5QrCode && scannerRunning) {
             html5QrCode.stop().then(() => {
                 scannerRunning = false;
-                $('qrScannerContainer').classList.remove('active');
-                $('startScannerBtn').style.display = 'inline-block';
-                $('stopScannerBtn').style.display = 'none';
+                resetScannerUI();
                 showToast('📷 Camera stopped', '');
-            }).catch(() => {});
+            }).catch(() => {
+                resetScannerUI();
+            });
         } else {
-            $('qrScannerContainer').classList.remove('active');
-            $('startScannerBtn').style.display = 'inline-block';
-            $('stopScannerBtn').style.display = 'none';
+            resetScannerUI();
         }
     }
 
-    function showManualEntry() {
-        $('invoiceIdInput').focus();
-        $('invoiceIdInput').placeholder = 'Enter Invoice ID here...';
+    function resetScannerUI() {
+        $('startScannerBtn').style.display = 'inline-block';
+        $('stopScannerBtn').style.display = 'none';
+        $('scanPlaceholder').style.display = 'block';
+        $('scannerOverlay').style.display = 'none';
+        $('scannerLine').style.display = 'none';
+        setStatus('', '');
     }
 
     function onScanSuccess(decodedText, decodedResult) {
-        // Decoded text is the Invoice ID
+        // Stop scanner
         stopScanner();
-        $('invoiceIdInput').value = decodedText;
-        fetchInvoice(decodedText);
-        showToast('✅ QR scanned successfully!', 'success');
+
+        // Decoded text is the Invoice ID
+        const invoiceId = decodedText.trim();
+        if (invoiceId) {
+            showToast('✅ QR scanned successfully!', 'success');
+            setStatus('✅ QR scanned! Fetching invoice...', 'success');
+            fetchInvoice(invoiceId);
+        } else {
+            showToast('❌ Invalid QR code', 'error');
+            setStatus('❌ Invalid QR code. Please try again.', 'error');
+            startScanner();
+        }
     }
 
     function onScanError(errorMessage) {
@@ -501,19 +516,6 @@
     // ============================================================
     // FETCH INVOICE
     // ============================================================
-    $('fetchBtn').addEventListener('click', () => {
-        const invoiceId = $('invoiceIdInput').value.trim();
-        if (!invoiceId) {
-            showToast('Please enter an Invoice ID', 'error');
-            return;
-        }
-        fetchInvoice(invoiceId);
-    });
-
-    $('invoiceIdInput').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') $('fetchBtn').click();
-    });
-
     async function fetchInvoice(invoiceId) {
         updateStep('step1', '⏳ Fetching...', 'loading');
 
@@ -526,14 +528,6 @@
             state.invoiceId = invoiceId;
             state.invoiceData = data;
 
-            // Show scan result
-            $('scanResult').classList.remove('hidden');
-            $('scanData').textContent = JSON.stringify({
-                invoice_id: invoiceId,
-                total: (data.invoice.total / 100).toFixed(2),
-                currency: data.invoice.currency?.toUpperCase()
-            }, null, 2);
-
             displayInvoice(data);
 
             updateStep('step1', '✅ Invoice Found', 'done');
@@ -541,11 +535,19 @@
             $('invoiceWaiting').classList.add('hidden');
             $('invoiceContent').classList.remove('hidden');
 
+            setStatus('✅ Invoice found! Review and pay.', 'success');
             showToast('✅ Invoice found! Review and pay.', 'success');
 
         } catch (error) {
             updateStep('step1', '❌ Failed', 'error');
+            setStatus('❌ ' + error.message, 'error');
             showToast('❌ ' + error.message, 'error');
+            // Restart scanner after 3 seconds
+            setTimeout(() => {
+                if (!scannerRunning) {
+                    startScanner();
+                }
+            }, 3000);
         }
     }
 
