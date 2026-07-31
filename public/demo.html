@@ -14,18 +14,57 @@
             max-width: 500px;
             margin: 0 auto;
         }
-        .app { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .app {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
         .header h1 { font-size: 20px; color: #1a237e; }
-        .badge { background: #e3f2fd; color: #0d47a1; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+        .badge {
+            background: #e3f2fd;
+            color: #0d47a1;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
 
-        .step { border: 1px solid #e8e8e8; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; transition: all 0.3s; }
+        .step {
+            border: 1px solid #e8e8e8;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            transition: all 0.3s;
+        }
         .step.active { border-color: #1a237e; background: #f8f9ff; }
         .step.completed { border-color: #4caf50; background: #f0f8f0; }
         .step.error { border-color: #f44336; background: #fff5f5; }
 
-        .step-header { display: flex; align-items: center; justify-content: space-between; }
-        .step-number { background: #e0e0e0; color: #666; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; flex-shrink: 0; }
+        .step-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .step-number {
+            background: #e0e0e0;
+            color: #666;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
         .step.active .step-number { background: #1a237e; color: white; }
         .step.completed .step-number { background: #4caf50; color: white; }
         .step.error .step-number { background: #f44336; color: white; }
@@ -38,20 +77,27 @@
 
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
-        .step-content { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e0e0e0; display: none; }
-        .step.active .step-content, .step.completed .step-content, .step.error .step-content { display: block; }
+        .step-content {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #e0e0e0;
+            display: none;
+        }
+        .step.active .step-content,
+        .step.completed .step-content,
+        .step.error .step-content { display: block; }
 
-        #qrScannerContainer { background: #000; border-radius: 12px; overflow: hidden; margin: 12px 0; position: relative; min-height: 320px; display: flex; align-items: center; justify-content: center; }
-        #qrScannerContainer video { width: 100%; height: auto; display: block; }
-        #qrScannerContainer .scanner-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 70%; border: 2px solid rgba(255,255,255,0.6); border-radius: 12px; box-shadow: 0 0 0 4000px rgba(0,0,0,0.4); pointer-events: none; }
-        #qrScannerContainer .scanner-line { position: absolute; top: 20%; left: 15%; width: 70%; height: 2px; background: #4fc3f7; box-shadow: 0 0 20px #4fc3f7; animation: scan 2s ease-in-out infinite; }
-        @keyframes scan { 0% { top: 20%; } 50% { top: 70%; } 100% { top: 20%; } }
-
-        #qrScannerContainer .scan-placeholder { color: #fff; text-align: center; padding: 40px; font-size: 16px; }
-        #qrScannerContainer .scan-placeholder .icon { font-size: 48px; display: block; margin-bottom: 12px; }
-        #qrScannerContainer .scan-placeholder .sub { font-size: 13px; color: #999; }
-
-        .btn { background: #1a237e; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; width: 100%; }
+        .btn {
+            background: #1a237e;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
         .btn:hover { background: #0d1555; }
         .btn:disabled { background: #999; cursor: not-allowed; }
         .btn-success { background: #4caf50; }
@@ -62,13 +108,42 @@
         .btn-outline:hover { background: #1a237e; color: white; }
         .btn-dashboard { background: #ff9800; color: white; }
         .btn-dashboard:hover { background: #e68900; }
+        .btn-warning { background: #ff9800; color: white; }
+        .btn-warning:hover { background: #e68900; }
+        .btn-pdf { background: #4fc3f7; color: #1a1a2e; }
+        .btn-pdf:hover { background: #29b6f6; }
 
-        .data-box { background: #f5f7fa; border-radius: 8px; padding: 12px; font-family: 'Courier New', monospace; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; margin-top: 8px; }
+        .data-box {
+            background: #f5f7fa;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 8px;
+        }
 
-        .invoice-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
-        .invoice-total { display: flex; justify-content: space-between; padding: 10px 0; border-top: 2px solid #333; font-weight: 700; font-size: 15px; }
-
-        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a2e; color: white; padding: 12px 24px; border-radius: 12px; font-size: 14px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: none; z-index: 1000; max-width: 90%; text-align: center; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a2e;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            border: 1px solid #333;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+        }
         .toast.show { display: block; }
         .toast.success { border-color: #4caf50; }
         .toast.error { border-color: #e94560; }
@@ -82,20 +157,102 @@
         .badge-green { background: #e8f5e9; color: #2e7d32; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
         .badge-orange { background: #fff3e0; color: #e65100; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 
-        .receipt-preview { background: #f5f7fa; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+        .receipt-preview {
+            background: #f5f7fa;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .flex-buttons { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+        .flex-buttons .btn { flex: 1; min-width: 100px; }
+
+        .payment-status-box {
+            background: #f0f7ff;
+            border: 1px solid #bbdefb;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 12px;
+            text-align: center;
+        }
+        .payment-status-box .status-pending { color: #ff9800; }
+        .payment-status-box .status-approved { color: #4caf50; }
+        .payment-status-box .status-failed { color: #f44336; }
+        .payment-status-box .status-text { font-size: 18px; font-weight: 600; }
+        .payment-status-box .status-detail { font-size: 13px; color: #666; margin-top: 4px; }
+
+        #qrScannerContainer {
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 12px 0;
+            position: relative;
+            min-height: 320px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #qrScannerContainer video { width: 100%; height: auto; display: block; }
+        #qrScannerContainer .scanner-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 70%;
+            border: 2px solid rgba(255,255,255,0.6);
+            border-radius: 12px;
+            box-shadow: 0 0 0 4000px rgba(0,0,0,0.4);
+            pointer-events: none;
+        }
+        #qrScannerContainer .scanner-line {
+            position: absolute;
+            top: 20%;
+            left: 15%;
+            width: 70%;
+            height: 2px;
+            background: #4fc3f7;
+            box-shadow: 0 0 20px #4fc3f7;
+            animation: scan 2s ease-in-out infinite;
+        }
+        @keyframes scan { 0% { top: 20%; } 50% { top: 70%; } 100% { top: 20%; } }
+        #qrScannerContainer .scan-placeholder {
+            color: #fff;
+            text-align: center;
+            padding: 40px;
+            font-size: 16px;
+        }
+        #qrScannerContainer .scan-placeholder .icon { font-size: 48px; display: block; margin-bottom: 12px; }
+        #qrScannerContainer .scan-placeholder .sub { font-size: 13px; color: #999; }
 
         .scan-controls { display: flex; gap: 8px; margin-top: 12px; }
         .scan-controls .btn { width: auto; padding: 10px 24px; font-size: 14px; }
 
-        #statusMessage { text-align: center; color: #666; font-size: 14px; margin: 8px 0; padding: 8px; border-radius: 8px; }
+        #statusMessage {
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 8px;
+        }
         #statusMessage.success { background: #e8f5e9; color: #2e7d32; }
         #statusMessage.error { background: #ffebee; color: #c62828; }
 
-        .amount-big { font-size: 28px; font-weight: 700; color: #1a237e; text-align: center; padding: 8px 0; }
-        .amount-big .currency { font-size: 18px; color: #666; }
-
-        .flex-buttons { display: flex; gap: 10px; margin-top: 12px; }
-        .flex-buttons .btn { flex: 1; }
+        .simulate-section {
+            background: #fff3e0;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #ffcc80;
+            margin-top: 12px;
+            display: none;
+        }
+        .simulate-section h4 { color: #e65100; margin-bottom: 4px; font-size: 14px; }
+        .simulate-section p { font-size: 13px; color: #666; margin-bottom: 8px; }
     </style>
 </head>
 <body>
@@ -115,7 +272,6 @@
         </div>
         <div class="step-content">
             <p class="text-sm">Scan the QR code from the EFTPOS device</p>
-
             <div id="qrScannerContainer">
                 <div id="qrScanner" style="position:relative; min-height:320px; width:100%;">
                     <div class="scan-placeholder" id="scanPlaceholder">
@@ -127,71 +283,48 @@
                     <div class="scanner-line" style="display:none;" id="scannerLine"></div>
                 </div>
             </div>
-
             <div class="scan-controls">
                 <button class="btn" id="startScannerBtn">📸 Start Camera</button>
                 <button class="btn btn-danger" id="stopScannerBtn" style="display:none;">✕ Stop</button>
             </div>
-
             <div id="statusMessage"></div>
         </div>
     </div>
 
-    <!-- Step 2: Invoice Details -->
+    <!-- Step 2: Payment & Status -->
     <div class="step" id="step2">
         <div class="step-header">
             <span class="step-number">2</span>
-            <span class="step-title">📋 Invoice</span>
+            <span class="step-title">💳 Payment Status</span>
             <span class="step-status" id="step2-status">⏳ Waiting</span>
         </div>
         <div class="step-content">
-            <p class="text-sm">Invoice details from the store</p>
-            <div id="invoiceContent" class="hidden">
-                <div id="invoiceItems"></div>
-                <button class="btn btn-success mt-12" id="payBtn">💳 Pay Now</button>
-            </div>
-            <div id="invoiceWaiting">
-                <p class="text-sm" style="color:#999;">⏳ Scan a QR code first...</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Step 3: Payment Result -->
-    <div class="step" id="step3">
-        <div class="step-header">
-            <span class="step-number">3</span>
-            <span class="step-title">💳 Payment</span>
-            <span class="step-status" id="step3-status">⏳ Waiting</span>
-        </div>
-        <div class="step-content">
+            <p class="text-sm">Payment status and receipt</p>
             <div id="paymentContent" class="hidden">
-                <div class="badge-green">✅ Payment Successful</div>
-                <div class="data-box" id="paymentData"></div>
-                <button class="btn btn-success mt-12" id="receiptBtn">📄 Generate Receipt</button>
-            </div>
-            <div id="paymentWaiting">
-                <p class="text-sm" style="color:#999;">⏳ Complete payment first...</p>
-            </div>
-        </div>
-    </div>
+                <div id="paymentStatusBox" class="payment-status-box">
+                    <div class="status-text status-pending" id="statusText">⏳ Waiting for payment...</div>
+                    <div class="status-detail" id="statusDetail">Payment link opened. Waiting for customer to complete payment.</div>
+                </div>
+                <div id="paymentDetails" class="data-box" style="display:none;"></div>
+                
+                <!-- Simulate Payment Section -->
+                <div class="simulate-section" id="simulateSection">
+                    <h4>⚡ Quick Demo: Simulate Payment</h4>
+                    <p>If payment is stuck, click below to simulate payment and generate receipt instantly.</p>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn btn-warning" id="testWebhookBtn" style="flex:1; min-width:120px;">🔧 Test Webhook</button>
+                        <button class="btn btn-success" id="simulateBtn" style="flex:1; min-width:120px;">⚡ Simulate Payment</button>
+                    </div>
+                </div>
 
-    <!-- Step 4: Receipt -->
-    <div class="step" id="step4">
-        <div class="step-header">
-            <span class="step-number">4</span>
-            <span class="step-title">📄 Receipt</span>
-            <span class="step-status" id="step4-status">⏳ Waiting</span>
-        </div>
-        <div class="step-content">
-            <div id="receiptContent" class="hidden">
-                <div class="receipt-preview" id="receiptText"></div>
                 <div class="flex-buttons">
-                    <button class="btn btn-dashboard" id="dashboardBtn">📊 View Dashboard</button>
-                    <button class="btn" id="viewReceiptBtn">📄 View PDF</button>
+                    <button class="btn btn-success hidden" id="receiptBtn">📄 Generate Receipt</button>
+                    <button class="btn btn-pdf hidden" id="viewReceiptBtn">📄 View PDF</button>
+                    <button class="btn btn-dashboard hidden" id="dashboardBtn">📊 Dashboard</button>
                 </div>
             </div>
-            <div id="receiptWaiting">
-                <p class="text-sm" style="color:#999;">⏳ Generate receipt first...</p>
+            <div id="paymentWaiting">
+                <p class="text-sm" style="color:#999;">⏳ Scan a QR code first...</p>
             </div>
         </div>
     </div>
@@ -205,11 +338,17 @@
     // STATE
     // ============================================================
     const state = {
-        invoiceId: null,
-        invoiceData: null,
+        paymentLinkId: null,
         paymentId: null,
+        checkoutUrl: null,
         receiptData: null,
-        pdfUrl: null
+        pdfUrl: null,
+        pollingInterval: null,
+        pollAttempts: 0,
+        maxPollAttempts: 30,
+        isPolling: false,
+        invoiceNumber: null,
+        receiptGenerated: false
     };
 
     const $ = id => document.getElementById(id);
@@ -252,9 +391,6 @@
         }
     }
 
-    // ============================================================
-    // STATUS MESSAGE
-    // ============================================================
     function setStatus(msg, type = '') {
         const el = $('statusMessage');
         el.textContent = msg;
@@ -331,11 +467,11 @@
 
     function onScanSuccess(decodedText, decodedResult) {
         stopScanner();
-        const invoiceId = decodedText.trim();
-        if (invoiceId && invoiceId.startsWith('in_')) {
-            showToast('✅ QR scanned! Fetching invoice...', 'success');
-            setStatus('✅ QR scanned! Fetching invoice...', 'success');
-            fetchInvoice(invoiceId);
+        const checkoutUrl = decodedText.trim();
+        if (checkoutUrl && checkoutUrl.startsWith('http')) {
+            showToast('✅ QR scanned! Opening payment...', 'success');
+            setStatus('✅ QR scanned! Payment page loaded.', 'success');
+            processCheckoutUrl(checkoutUrl);
         } else {
             showToast('❌ Invalid QR code', 'error');
             setStatus('❌ Invalid QR code. Please try again.', 'error');
@@ -346,179 +482,288 @@
     function onScanError(errorMessage) { /* Ignore */ }
 
     // ============================================================
-    // FETCH INVOICE — FIXED
+    // PROCESS CHECKOUT URL
     // ============================================================
-    async function fetchInvoice(invoiceId) {
-        updateStep('step1', '⏳ Fetching...', 'loading');
+    function processCheckoutUrl(checkoutUrl) {
+        state.checkoutUrl = checkoutUrl;
 
+        const urlParts = checkoutUrl.split('/');
+        state.paymentLinkId = urlParts[urlParts.length - 1];
+        state.invoiceNumber = 'INV-' + Date.now().toString().slice(-6);
+
+        console.log('🔗 Payment Link ID:', state.paymentLinkId);
+
+        updateStep('step1', '✅ QR Scanned', 'done');
+        updateStep('step2', '💳 Processing', 'loading');
+        $('paymentWaiting').classList.add('hidden');
+        $('paymentContent').classList.remove('hidden');
+
+        updatePaymentStatus('pending', '⏳ Opening payment page...', 'Redirecting to Pinch payment page.');
+
+        const paymentWindow = window.open(checkoutUrl, '_blank', 'width=600,height=700');
+
+        if (!paymentWindow) {
+            window.location.href = checkoutUrl;
+        } else {
+            startPolling();
+        }
+    }
+
+    // ============================================================
+    // AUTO-GENERATE RECEIPT FROM PAYMENT
+    // ============================================================
+    async function generateReceiptFromPayment(paymentId) {
         try {
-            const response = await fetch(`${BASE_URL}/stripe/invoice/${invoiceId}`);
+            console.log('📄 Generating receipt for payment:', paymentId);
+            
+            const response = await fetch(`${BASE_URL}/generate-receipt-from-payment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ paymentId: paymentId })
+            });
+            
             const data = await response.json();
-
-            if (!data.success) throw new Error(data.error || 'Invoice not found');
-
-            state.invoiceId = invoiceId;
-            state.invoiceData = data;
-
-            // Log the data to debug
-            console.log('📄 Invoice Data:', data);
-            console.log('💰 Total:', data.invoice?.total, 'Currency:', data.invoice?.currency);
-
-            displayInvoice(data);
-
-            updateStep('step1', '✅ Invoice Found', 'done');
-            updateStep('step2', '📋 Ready', 'ready');
-            $('invoiceWaiting').classList.add('hidden');
-            $('invoiceContent').classList.remove('hidden');
-
-            setStatus('✅ Invoice found! Review and pay.', 'success');
-            showToast('✅ Invoice found! Review and pay.', 'success');
-
+            
+            if (data.success) {
+                console.log('✅ Receipt generated:', data);
+                state.receiptGenerated = true;
+                showToast('✅ Receipt generated automatically!', 'success');
+                
+                // Fetch the latest receipt to display
+                const receiptResponse = await fetch(`${BASE_URL}/receipts`);
+                const receiptData = await receiptResponse.json();
+                if (receiptData.success && receiptData.receipts.length > 0) {
+                    state.receiptData = receiptData.receipts[0];
+                    state.pdfUrl = state.receiptData.pdf_url;
+                    document.getElementById('viewReceiptBtn').classList.remove('hidden');
+                }
+            } else {
+                console.error('❌ Receipt generation failed:', data);
+            }
         } catch (error) {
-            updateStep('step1', '❌ Failed', 'error');
-            setStatus('❌ ' + error.message, 'error');
-            showToast('❌ ' + error.message, 'error');
-            setTimeout(() => { if (!scannerRunning) startScanner(); }, 3000);
+            console.error('❌ Auto-receipt generation error:', error);
         }
     }
 
     // ============================================================
-    // DISPLAY INVOICE — FIXED AMOUNT
+    // POLL FOR PAYMENT STATUS
     // ============================================================
-    function displayInvoice(data) {
-    const invoice = data.invoice;
-    const lineItems = data.line_items || [];
+    function startPolling() {
+        if (state.isPolling) return;
+        state.isPolling = true;
+        state.pollAttempts = 0;
 
-    // ✅ FORCE GET TOTAL from invoice
-    let total = invoice?.total || 0;
-    let currency = invoice?.currency?.toUpperCase() || 'AUD';
+        updatePaymentStatus('pending', '⏳ Waiting for payment...', 'Payment page opened. Waiting for customer to complete payment.');
 
-    // If total is missing, try to calculate from line items
-    if (total === 0 && lineItems.length > 0) {
-        total = lineItems.reduce((sum, item) => sum + (item.amount * (item.quantity || 1)), 0);
+        state.pollingInterval = setInterval(async () => {
+            state.pollAttempts++;
+
+            try {
+                const response = await fetch(`${BASE_URL}/check-payment/${state.paymentLinkId}`);
+                const data = await response.json();
+
+                console.log(`📊 Poll attempt ${state.pollAttempts}:`, data.status);
+
+                if (data.success) {
+                    // Check for approved statuses
+                    const approvedStatuses = ['approved', 'succeeded', 'completed', 'captured', 'settled'];
+                    const failedStatuses = ['failed', 'declined', 'dishonoured', 'cancelled', 'refunded'];
+                    
+                    if (approvedStatuses.includes(data.status)) {
+                        stopPolling();
+                        state.paymentId = data.paymentId;
+                        updatePaymentStatus('approved', '✅ Payment approved!', `Payment of $${(data.amount / 100).toFixed(2)} ${data.currency} was successful.`);
+                        showToast('✅ Payment successful! Generating receipt...', 'success');
+                        
+                        // ✅ Auto-generate receipt
+                        if (data.paymentId) {
+                            await generateReceiptFromPayment(data.paymentId);
+                        }
+                        
+                        document.getElementById('receiptBtn').classList.remove('hidden');
+                        document.getElementById('dashboardBtn').classList.remove('hidden');
+                        if (state.receiptGenerated) {
+                            document.getElementById('viewReceiptBtn').classList.remove('hidden');
+                        }
+                        updateStep('step2', '✅ Payment Done', 'done');
+                        return;
+                    }
+                    
+                    if (failedStatuses.includes(data.status)) {
+                        stopPolling();
+                        updatePaymentStatus('failed', '❌ Payment failed', 'The payment was declined or failed. Please try again.');
+                        showToast('❌ Payment failed', 'error');
+                        return;
+                    }
+
+                    if (state.pollAttempts >= 5 && data.status === 'pending') {
+                        document.getElementById('simulateSection').style.display = 'block';
+                    }
+
+                    updatePaymentStatus('pending', '⏳ Processing...', `Waiting for payment confirmation... (${state.pollAttempts}/${state.maxPollAttempts})`);
+                }
+
+                if (state.pollAttempts >= state.maxPollAttempts) {
+                    stopPolling();
+                    updatePaymentStatus('pending', '⏳ Still processing...', 'Use "Simulate Payment" button below.');
+                    document.getElementById('simulateSection').style.display = 'block';
+                }
+
+            } catch (error) {
+                console.error('Polling error:', error);
+            }
+        }, 3000);
     }
 
-    // ✅ FORCE: If still 0, use a default for demo
-    if (total === 0) {
-        total = 4500; // $45.00 default
-        console.log('⚠️ Using default amount: 4500');
+    function stopPolling() {
+        if (state.pollingInterval) {
+            clearInterval(state.pollingInterval);
+            state.pollingInterval = null;
+        }
+        state.isPolling = false;
     }
 
-    const totalDisplay = (total / 100).toFixed(2);
+    // ============================================================
+    // UPDATE PAYMENT STATUS UI
+    // ============================================================
+    function updatePaymentStatus(status, text, detail) {
+        const statusText = document.getElementById('statusText');
+        const statusDetail = document.getElementById('statusDetail');
 
-    // ✅ FORCE DISPLAY: Show amount even if data is missing
-    $('invoiceItems').innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-            <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
-                <div style="font-size:10px;color:#666;">Invoice #</div>
-                <div style="font-weight:600;font-size:14px;">${invoice?.number || 'N/A'}</div>
-            </div>
-            <div style="background:#e8f5e9;padding:10px;border-radius:8px;border:3px solid #4caf50;">
-                <div style="font-size:10px;color:#2e7d32;">💰 TOTAL AMOUNT</div>
-                <div style="font-weight:700;font-size:32px;color:#1a237e;padding:4px 0;">
-                    ${currency} $${totalDisplay}
-                </div>
-            </div>
-            <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
-                <div style="font-size:10px;color:#666;">Store</div>
-                <div style="font-weight:600;font-size:13px;">${invoice?.metadata?.store_name || 'Store'}</div>
-            </div>
-            <div style="background:#f8f9fa;padding:10px;border-radius:8px;">
-                <div style="font-size:10px;color:#666;">Status</div>
-                <div><span class="badge-orange">${invoice?.status || 'open'}</span></div>
-            </div>
-        </div>
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px;">📦 Items</div>
-        ${lineItems.map(item => `
-            <div class="invoice-item">
-                <span>${item.description || 'Item'} × ${item.quantity || 1}</span>
-                <span>$${(item.amount / 100).toFixed(2)}</span>
-            </div>
-        `).join('') || '<p style="color:#999;font-size:13px;">No items</p>'}
-        <div class="invoice-total">
-            <span>TOTAL</span>
-            <span style="font-size:20px;color:#1a237e;">${currency} $${totalDisplay}</span>
-        </div>
-    `;
-        }
+        statusText.textContent = text;
+        statusText.className = 'status-text ' + 
+            (status === 'approved' ? 'status-approved' : 
+             status === 'failed' ? 'status-failed' : 'status-pending');
+        statusDetail.textContent = detail;
+    }
 
     // ============================================================
-    // PAY NOW
+    // SIMULATE PAYMENT
     // ============================================================
-    $('payBtn').addEventListener('click', async () => {
-        if (!state.invoiceData) {
-            showToast('Please fetch an invoice first', 'error');
-            return;
-        }
-
-        const btn = $('payBtn');
+    document.getElementById('simulateBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('simulateBtn');
         btn.disabled = true;
-        btn.textContent = '⏳ Processing...';
-        updateStep('step2', '⏳ Paying...', 'loading');
+        btn.textContent = '⏳ Simulating...';
 
         try {
-            const invoice = state.invoiceData.invoice;
-            const lineItems = state.invoiceData.line_items || [];
-
-            // Calculate total
-            let total = invoice?.total || 0;
-            if (total === 0 && lineItems.length > 0) {
-                total = lineItems.reduce((sum, item) => sum + (item.amount * (item.quantity || 1)), 0);
-            }
-
-            const response = await fetch(`${BASE_URL}/test-payment`, {
+            const response = await fetch(`${BASE_URL}/simulate-payment`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    email: invoice?.customer_email || 'customer@example.com',
-                    firstName: invoice?.customer_name?.split(' ')[0] || 'Customer',
-                    lastName: invoice?.customer_name?.split(' ')[1] || 'User',
-                    amount: total,
-                    reference: invoice?.number || `INV-${Date.now()}`,
-                    items: lineItems.map(item => ({
-                        description: item.description || 'Item',
-                        amount: item.amount,
-                        quantity: item.quantity || 1
-                    }))
+                    storeName: 'Bunnings Warehouse',
+                    invoiceNumber: state.invoiceNumber || 'INV-SIM-001',
+                    total: 5500,
+                    items: [
+                        { description: 'Hammer', amount: 2500, quantity: 1 },
+                        { description: 'Paint', amount: 1000, quantity: 2 },
+                        { description: 'Tape', amount: 500, quantity: 1 }
+                    ],
+                    payerId: state.payerId
                 })
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Payment failed');
 
-            state.paymentId = data.payment?.id || data.data?.id || data.result?.paymentId;
+            if (!data.success) throw new Error(data.error);
 
-            updateStep('step2', '✅ Paid', 'done');
-            updateStep('step3', '✅ Done', 'done');
-            $('paymentWaiting').classList.add('hidden');
-            $('paymentContent').classList.remove('hidden');
-            $('paymentData').textContent = JSON.stringify({
-                payment_id: state.paymentId,
-                amount: (total / 100).toFixed(2),
-                currency: invoice?.currency?.toUpperCase() || 'AUD',
-                status: 'success'
-            }, null, 2);
+            showToast('✅ Payment simulated successfully!', 'success');
+            updatePaymentStatus('approved', '✅ Payment Approved!', 'Payment was simulated successfully.');
+            document.getElementById('receiptBtn').classList.remove('hidden');
+            document.getElementById('dashboardBtn').classList.remove('hidden');
+            document.getElementById('viewReceiptBtn').classList.remove('hidden');
+            updateStep('step2', '✅ Payment Done', 'done');
 
-            btn.textContent = '✅ Paid';
+            btn.textContent = '✅ Done';
             btn.disabled = false;
-
-            showToast('✅ Payment successful! Generate receipt.', 'success');
 
         } catch (error) {
-            btn.textContent = '💳 Retry';
+            console.error('Simulation error:', error);
+            btn.textContent = '⚠️ Retry';
             btn.disabled = false;
-            updateStep('step2', '❌ Failed', 'error');
             showToast('❌ ' + error.message, 'error');
         }
     });
 
     // ============================================================
-    // GENERATE RECEIPT
+    // TEST WEBHOOK
     // ============================================================
-    $('receiptBtn').addEventListener('click', async () => {
-        updateStep('step3', '⏳ Generating...', 'loading');
+    document.getElementById('testWebhookBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('testWebhookBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Processing...';
 
         try {
+            const response = await fetch(`${BASE_URL}/test-webhook`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'payment.succeeded',
+                    data: {
+                        id: `pmt_test_${Date.now()}`,
+                        payerId: `pyr_test_${Date.now()}`,
+                        amount: 5500,
+                        currency: 'AUD',
+                        reference: state.invoiceNumber || 'INV-TEST-001',
+                        status: 'approved',
+                        payer: {
+                            emailAddress: 'test@example.com',
+                            firstName: 'Test',
+                            lastName: 'User'
+                        },
+                        metadata: {
+                            store_name: 'Bunnings Warehouse',
+                            staff_name: 'John Smith',
+                            items: JSON.stringify([
+                                { description: 'Hammer', amount: 2500, quantity: 1 },
+                                { description: 'Paint', amount: 1000, quantity: 2 }
+                            ])
+                        }
+                    }
+                })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                showToast('✅ Webhook test passed! Receipt generated.', 'success');
+                btn.textContent = '✅ Done';
+                document.getElementById('receiptBtn').classList.remove('hidden');
+                document.getElementById('dashboardBtn').classList.remove('hidden');
+                document.getElementById('viewReceiptBtn').classList.remove('hidden');
+                updateStep('step2', '✅ Payment Done', 'done');
+                updatePaymentStatus('approved', '✅ Payment Approved!', 'Webhook test completed successfully.');
+            } else {
+                throw new Error(data.error || 'Webhook test failed');
+            }
+        } catch (error) {
+            console.error('Test webhook error:', error);
+            btn.textContent = '❌ Retry';
+            showToast('❌ ' + error.message, 'error');
+        }
+        btn.disabled = false;
+    });
+
+    // ============================================================
+    // GENERATE RECEIPT (Manual)
+    // ============================================================
+    document.getElementById('receiptBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('receiptBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Generating...';
+
+        try {
+            // If we have a paymentId, use it to generate receipt
+            if (state.paymentId) {
+                await generateReceiptFromPayment(state.paymentId);
+                btn.textContent = '✅ Generated!';
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline');
+                document.getElementById('viewReceiptBtn').classList.remove('hidden');
+                document.getElementById('dashboardBtn').classList.remove('hidden');
+                showToast('✅ Receipt generated!', 'success');
+                return;
+            }
+
+            // Fallback: fetch latest receipt
             const response = await fetch(`${BASE_URL}/receipts`);
             const data = await response.json();
 
@@ -530,36 +775,59 @@
             state.receiptData = latest;
             state.pdfUrl = latest.pdf_url;
 
-            $('receiptText').textContent = latest.receipt_text || 'Receipt generated';
+            btn.textContent = '✅ Generated!';
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline');
 
-            updateStep('step3', '✅ Done', 'done');
-            updateStep('step4', '📄 Ready', 'ready');
-            $('receiptWaiting').classList.add('hidden');
-            $('receiptContent').classList.remove('hidden');
-
+            document.getElementById('viewReceiptBtn').classList.remove('hidden');
+            document.getElementById('dashboardBtn').classList.remove('hidden');
             showToast('✅ Receipt generated!', 'success');
 
         } catch (error) {
-            updateStep('step3', '❌ Failed', 'error');
+            console.error('Receipt generation error:', error);
+            btn.textContent = '📄 Retry';
+            btn.disabled = false;
             showToast('❌ ' + error.message, 'error');
         }
     });
 
     // ============================================================
-    // VIEW PDF & DASHBOARD
+    // VIEW PDF
     // ============================================================
-    $('viewReceiptBtn').addEventListener('click', () => {
-        if (state.pdfUrl) {
-            window.open(`${BASE_URL}${state.pdfUrl}`, '_blank');
-        } else if (state.receiptData?.pdf_path) {
-            const filename = state.receiptData.pdf_path.split('/').pop();
-            window.open(`${BASE_URL}/receipts/view/${filename}`, '_blank');
-        } else {
+    document.getElementById('viewReceiptBtn').addEventListener('click', async () => {
+        try {
+            if (state.pdfUrl) {
+                window.open(`${BASE_URL}${state.pdfUrl}`, '_blank');
+                return;
+            }
+
+            if (state.receiptData?.pdf_path) {
+                const filename = state.receiptData.pdf_path.split('/').pop();
+                window.open(`${BASE_URL}/receipts/view/${filename}`, '_blank');
+                return;
+            }
+
+            const response = await fetch(`${BASE_URL}/receipts`);
+            const data = await response.json();
+            if (data.success && data.receipts.length > 0) {
+                const latest = data.receipts[0];
+                if (latest.pdf_path) {
+                    const filename = latest.pdf_path.split('/').pop();
+                    window.open(`${BASE_URL}/receipts/view/${filename}`, '_blank');
+                    return;
+                }
+            }
             showToast('No PDF available yet', 'error');
+        } catch (error) {
+            console.error('View PDF error:', error);
+            showToast('Error opening PDF', 'error');
         }
     });
 
-    $('dashboardBtn').addEventListener('click', () => {
+    // ============================================================
+    // DASHBOARD BUTTON
+    // ============================================================
+    document.getElementById('dashboardBtn').addEventListener('click', () => {
         window.location.href = `${BASE_URL}/receipts/dashboard`;
     });
 
@@ -568,12 +836,9 @@
     // ============================================================
     console.log('🧾 Pinch Receipt - Customer App loaded');
     console.log('📍 BASE_URL:', BASE_URL);
-    console.log('💡 Click "Start Camera" to scan QR code');
 
     updateStep('step1', '⏳ Ready', 'ready');
     updateStep('step2', '⏳ Waiting', '');
-    updateStep('step3', '⏳ Waiting', '');
-    updateStep('step4', '⏳ Waiting', '');
 </script>
 </body>
 </html>

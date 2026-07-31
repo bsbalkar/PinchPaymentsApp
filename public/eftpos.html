@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>EFTPOS Simulator - Staff</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -201,7 +202,7 @@
             color: #666;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-bottom: 4px;
+            margin-top: 8px;
         }
         #qrCode .qr-invoice-id {
             font-size: 11px;
@@ -210,7 +211,7 @@
             word-break: break-all;
             max-width: 180px;
             font-weight: 600;
-            margin-top: 6px;
+            margin-top: 4px;
         }
 
         .copy-btn {
@@ -246,6 +247,40 @@
         .toast.success { border-color: #4caf50; }
         .toast.error { border-color: #e94560; }
 
+        /* Payment Done Section */
+        #paymentDoneSection {
+            display: none;
+            margin-top: 16px;
+            text-align: center;
+            background: #0a0a1a;
+            border-radius: 16px;
+            padding: 20px;
+            border: 2px solid #4caf50;
+        }
+        #paymentDoneSection .done-icon { font-size: 48px; margin-bottom: 8px; }
+        #paymentDoneSection .done-title { color: #4caf50; font-size: 20px; font-weight: 700; }
+        #paymentDoneSection .done-sub { color: #8888aa; font-size: 13px; margin-top: 4px; }
+        #paymentDoneSection .done-actions {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-back {
+            padding: 10px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+        }
+        .btn-back:hover { opacity: 0.85; transform: scale(0.97); }
+        .btn-back:active { transform: scale(0.95); }
+        .btn-back-home { background: #4fc3f7; color: #0a0a1a; }
+        .btn-back-new { background: #4caf50; color: white; }
+
         @media (max-width: 480px) {
             .eftpos { padding: 16px; }
             .eftpos-screen { padding: 14px; }
@@ -253,8 +288,6 @@
             .item-row input { font-size: 11px; padding: 4px 6px; }
             #qrCode img { width: 140px; height: 140px; }
         }
-
-        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -266,7 +299,7 @@
     </div>
 
     <div class="eftpos-screen" id="eftposScreen">
-        <div class="label">💳 GENERATE INVOICE QR</div>
+        <div class="label">💳 GENERATE PAYMENT</div>
         <div class="amount-display">
             <span class="currency">AUD</span>
             <span id="totalDisplay">0.00</span>
@@ -311,7 +344,7 @@
                 </div>
                 <div class="flex-1">
                     <div class="label">GST Amount (AUD)</div>
-                    <input class="value-input" id="gstAmount" value="4.50" placeholder="0.00" type="number" step="0.01" readonly>
+                    <input class="value-input" id="gstAmount" value="0.00" placeholder="0.00" type="number" step="0.01" readonly>
                 </div>
             </div>
         </div>
@@ -334,11 +367,22 @@
         <div id="qrSection">
             <div class="qr-title">📱 SCAN WITH CUSTOMER APP</div>
             <div id="qrCode">
-                <div class="qr-label">INVOICE ID</div>
-                <img id="qrImage" src="" alt="QR Code" style="display:none;">
+                <div id="qrcode"></div>
+                <div class="qr-label">INVOICE</div>
                 <div class="qr-invoice-id" id="qrInvoiceId">-</div>
             </div>
             <button class="copy-btn" id="copyInvoiceBtn">📋 Copy Invoice ID</button>
+        </div>
+
+        <!-- PAYMENT DONE SECTION -->
+        <div id="paymentDoneSection">
+            <div class="done-icon">✅</div>
+            <div class="done-title">Payment Done!</div>
+            <div class="done-sub">The payment has been successfully processed.</div>
+            <div class="done-actions">
+                <button class="btn-back btn-back-home" id="backToHomeBtn">🏠 Back to Home</button>
+                <button class="btn-back btn-back-new" id="newPaymentBtn">💳 New Payment</button>
+            </div>
         </div>
 
         <!-- RESULT BOX -->
@@ -348,7 +392,7 @@
         </div>
     </div>
 
-    <button class="btn-generate" id="generateBtn">📄 GENERATE QR CODE</button>
+    <button class="btn-generate" id="generateBtn">📄 GENERATE PAYMENT QR</button>
     <button class="btn-reset" id="resetBtn">↺ Reset to Defaults</button>
 </div>
 
@@ -373,13 +417,37 @@
 
     const $ = id => document.getElementById(id);
     const API_BASE = window.location.origin;
+    let currentQrCode = null;
+    let paymentCheckInterval = null;
 
     // ============================================================
-    // RENDER ITEMS
+    // UPDATE TOTAL — COMPLETE FIX
+    // ============================================================
+    function updateTotal() {
+        let subtotal = 0;
+        items.forEach(item => {
+            const qty = parseFloat(item.qty) || 0;
+            const price = parseFloat(item.price) || 0;
+            subtotal += qty * price;
+        });
+        
+        const gstRate = parseFloat($('gstRate').value) || 0;
+        const gstAmount = subtotal * (gstRate / 100);
+        const total = subtotal + gstAmount;
+        
+        $('totalDisplay').textContent = total.toFixed(2);
+        $('gstAmount').value = gstAmount.toFixed(2);
+        
+        return total;
+    }
+
+    // ============================================================
+    // RENDER ITEMS — FIXED EVENT LISTENERS
     // ============================================================
     function renderItems() {
         const container = $('itemsContainer');
         container.innerHTML = '';
+        
         items.forEach((item, index) => {
             const row = document.createElement('div');
             row.className = 'item-row';
@@ -392,43 +460,31 @@
             container.appendChild(row);
         });
 
-        document.querySelectorAll('.item-name').forEach(el => {
-            el.addEventListener('input', (e) => {
-                items[parseInt(e.target.dataset.index)].name = e.target.value;
+        container.querySelectorAll('.item-name, .item-qty, .item-price').forEach(el => {
+            el.addEventListener('input', function() {
+                const idx = parseInt(this.dataset.index);
+                if (this.classList.contains('item-name')) {
+                    items[idx].name = this.value;
+                } else if (this.classList.contains('item-qty')) {
+                    items[idx].qty = parseFloat(this.value) || 0;
+                } else if (this.classList.contains('item-price')) {
+                    items[idx].price = parseFloat(this.value) || 0;
+                }
                 updateTotal();
             });
+            el.addEventListener('change', updateTotal);
         });
-        document.querySelectorAll('.item-qty').forEach(el => {
-            el.addEventListener('input', (e) => {
-                items[parseInt(e.target.dataset.index)].qty = parseFloat(e.target.value) || 0;
-                updateTotal();
-            });
-        });
-        document.querySelectorAll('.item-price').forEach(el => {
-            el.addEventListener('input', (e) => {
-                items[parseInt(e.target.dataset.index)].price = parseFloat(e.target.value) || 0;
-                updateTotal();
-            });
-        });
-        document.querySelectorAll('.remove-btn').forEach(el => {
-            el.addEventListener('click', (e) => {
-                items.splice(parseInt(e.target.dataset.index), 1);
+
+        container.querySelectorAll('.remove-btn').forEach(el => {
+            el.addEventListener('click', function() {
+                const idx = parseInt(this.dataset.index);
+                items.splice(idx, 1);
                 renderItems();
                 updateTotal();
             });
         });
-        updateTotal();
-    }
 
-    // ============================================================
-    // UPDATE TOTAL
-    // ============================================================
-    function updateTotal() {
-        let total = 0;
-        items.forEach(item => { total += (item.qty || 0) * (item.price || 0); });
-        $('totalDisplay').textContent = total.toFixed(2);
-        const gstRate = parseFloat($('gstRate').value) || 10;
-        $('gstAmount').value = (total * (gstRate / 100)).toFixed(2);
+        updateTotal();
     }
 
     // ============================================================
@@ -441,6 +497,63 @@
         if (inputs.length > 0) {
             inputs[inputs.length - 1].focus();
         }
+        updateTotal();
+    });
+
+    // ============================================================
+    // GST RATE CHANGE
+    // ============================================================
+    $('gstRate').addEventListener('input', updateTotal);
+    $('gstRate').addEventListener('change', updateTotal);
+
+    // ============================================================
+    // SHOW PAYMENT DONE
+    // ============================================================
+    function showPaymentDone() {
+        document.getElementById('qrSection').style.display = 'none';
+        document.getElementById('paymentDoneSection').style.display = 'block';
+        document.getElementById('generateBtn').disabled = true;
+        document.getElementById('generateBtn').textContent = '✅ PAID';
+        document.getElementById('connectionStatus').textContent = '✅ Payment Done';
+        
+        // Clear any polling interval
+        if (paymentCheckInterval) {
+            clearInterval(paymentCheckInterval);
+            paymentCheckInterval = null;
+        }
+    }
+
+    // ============================================================
+    // BACK TO HOME
+    // ============================================================
+    document.getElementById('backToHomeBtn').addEventListener('click', function() {
+        window.location.href = '/';
+    });
+
+    // ============================================================
+    // NEW PAYMENT
+    // ============================================================
+    document.getElementById('newPaymentBtn').addEventListener('click', function() {
+        // Reset the form
+        document.getElementById('paymentDoneSection').style.display = 'none';
+        document.getElementById('qrSection').style.display = 'none';
+        document.getElementById('generateBtn').disabled = false;
+        document.getElementById('generateBtn').textContent = '📄 GENERATE PAYMENT QR';
+        document.getElementById('connectionStatus').textContent = '● Online';
+        document.getElementById('resultBox').className = 'result-box';
+        document.getElementById('resultBox').style.display = 'none';
+        
+        // Clear QR code
+        if (currentQrCode) {
+            document.getElementById('qrcode').innerHTML = '';
+            currentQrCode = null;
+        }
+        
+        // Reset items to defaults
+        items = DEFAULT_ITEMS.map(i => ({ ...i }));
+        renderItems();
+        updateTotal();
+        showToast('🔄 Ready for new payment', 'success');
     });
 
     // ============================================================
@@ -457,19 +570,28 @@
         $('invoiceNumber').value = `INV-${Date.now().toString().slice(-6)}`;
         $('reference').value = `REF-${Date.now().toString().slice(-6)}`;
         document.getElementById('qrSection').style.display = 'none';
+        document.getElementById('paymentDoneSection').style.display = 'none';
         const resultBox = $('resultBox');
         resultBox.className = 'result-box';
         resultBox.style.display = 'none';
         $('generateBtn').disabled = false;
-        $('generateBtn').textContent = '📄 GENERATE QR CODE';
+        $('generateBtn').textContent = '📄 GENERATE PAYMENT QR';
         $('generateBtn').className = 'btn-generate';
         $('connectionStatus').textContent = '● Online';
+        if (currentQrCode) {
+            document.getElementById('qrcode').innerHTML = '';
+            currentQrCode = null;
+        }
+        if (paymentCheckInterval) {
+            clearInterval(paymentCheckInterval);
+            paymentCheckInterval = null;
+        }
         updateTotal();
         showToast('🔄 Reset to defaults', 'success');
     });
 
     // ============================================================
-    // GENERATE QR CODE
+    // GENERATE PINCH PAYMENT LINK & QR CODE
     // ============================================================
     $('generateBtn').addEventListener('click', async () => {
         if ($('generateBtn').disabled) return;
@@ -485,8 +607,8 @@
         let subtotal = 0;
         const lineItems = [];
         items.forEach(item => {
-            const qty = item.qty || 0;
-            const price = item.price || 0;
+            const qty = parseFloat(item.qty) || 0;
+            const price = parseFloat(item.price) || 0;
             const total = qty * price;
             subtotal += total;
             lineItems.push({
@@ -499,6 +621,11 @@
         const gstAmount = subtotal * (gstRate / 100);
         const total = subtotal + gstAmount;
 
+        if (total < 1) {
+            showToast('⚠️ Total amount must be at least $1.00', 'error');
+            return;
+        }
+
         $('generateBtn').disabled = true;
         $('generateBtn').textContent = '⏳ GENERATING...';
         $('generateBtn').className = 'btn-generate processing';
@@ -509,50 +636,70 @@
         resultBox.style.display = 'none';
 
         try {
-            const response = await fetch(`${API_BASE}/eftpos-generate`, {
+            const payload = {
+                storeName,
+                storeEmail,
+                staffName,
+                staffPhone,
+                invoiceNumber,
+                reference,
+                items: lineItems,
+                subtotal: Math.round(subtotal * 100),
+                gstAmount: Math.round(gstAmount * 100),
+                total: Math.round(total * 100),
+                gstRate
+            };
+
+            const response = await fetch(`${API_BASE}/create-payment`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    storeName, storeEmail, staffName, staffPhone,
-                    invoiceNumber, reference,
-                    items: lineItems,
-                    subtotal: Math.round(subtotal * 100),
-                    gstAmount: Math.round(gstAmount * 100),
-                    total: Math.round(total * 100),
-                    gstRate
-                })
+                body: JSON.stringify(payload)
             });
 
             const data = await response.json();
-            if (!response.ok) throw new Error(data.error || 'Generation failed');
 
-            // Generate QR Code using external API (api.qrserver.com)
-            const qrText = data.invoice_id;
-            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrText)}`;
+            if (!response.ok) {
+                console.error('❌ Server error:', data);
+                throw new Error(data.error || 'Failed to create payment');
+            }
 
-            // Show QR Section
+            console.log('✅ Payment link created:', data);
+
             const qrSection = document.getElementById('qrSection');
             qrSection.style.display = 'block';
-            const qrImage = document.getElementById('qrImage');
-            qrImage.src = qrUrl;
-            qrImage.style.display = 'block';
-            document.getElementById('qrInvoiceId').textContent = data.invoice_id;
+            document.getElementById('qrInvoiceId').textContent = data.invoiceNumber || invoiceNumber;
+
+            document.getElementById('qrcode').innerHTML = '';
+
+            currentQrCode = new QRCode(document.getElementById("qrcode"), {
+                text: data.checkoutUrl || data.qrData,
+                width: 200,
+                height: 200,
+                colorDark: "#1a237e",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
 
             resultBox.className = 'result-box success';
             resultBox.style.display = 'block';
-            document.getElementById('resultLabel').textContent = '✅ QR Code Generated!';
+            document.getElementById('resultLabel').textContent = '✅ Payment QR Generated!';
             document.getElementById('resultValue').innerHTML = `
-                Invoice ID: <strong>${data.invoice_id}</strong><br>
-                Total: ${data.currency || 'AUD'} $${(data.total / 100).toFixed(2)}<br>
+                Invoice: <strong>${data.invoiceNumber || invoiceNumber}</strong><br>
+                Amount: ${data.currency || 'AUD'} $${(data.total / 100).toFixed(2)}<br>
                 <span style="color:#4fc3f7;">📱 Scan QR code with customer app to pay</span>
             `;
 
-            $('generateBtn').textContent = '✅ QR READY';
-            $('generateBtn').className = 'btn-generate';
-            $('connectionStatus').textContent = '✅ Ready';
+            $('generateBtn').textContent = '⏳ WAITING FOR PAYMENT...';
+            $('generateBtn').className = 'btn-generate processing';
+            $('connectionStatus').textContent = '⏳ Waiting for payment...';
+
+            // Start polling for payment status
+            startPaymentPolling(data.paymentLinkId);
+
             showToast('✅ QR Code generated! Scan with customer app.', 'success');
 
         } catch (error) {
+            console.error('❌ Payment generation failed:', error);
             resultBox.className = 'result-box error';
             resultBox.style.display = 'block';
             document.getElementById('resultLabel').textContent = '❌ Generation Failed';
@@ -564,6 +711,61 @@
             showToast('❌ ' + error.message, 'error');
         }
     });
+
+    // ============================================================
+    // POLL FOR PAYMENT STATUS
+    // ============================================================
+    function startPaymentPolling(paymentLinkId) {
+        if (paymentCheckInterval) {
+            clearInterval(paymentCheckInterval);
+        }
+
+        let attempts = 0;
+        const maxAttempts = 30;
+
+        paymentCheckInterval = setInterval(async () => {
+            attempts++;
+
+            try {
+                const response = await fetch(`${API_BASE}/check-payment/${paymentLinkId}`);
+                const data = await response.json();
+
+                console.log(`📊 Poll attempt ${attempts}:`, data.status);
+
+                if (data.success && data.status === 'approved') {
+                    // Payment approved!
+                    clearInterval(paymentCheckInterval);
+                    paymentCheckInterval = null;
+                    showPaymentDone();
+                    showToast('✅ Payment received!', 'success');
+                    return;
+                }
+
+                if (data.success && (data.status === 'failed' || data.status === 'declined')) {
+                    clearInterval(paymentCheckInterval);
+                    paymentCheckInterval = null;
+                    $('generateBtn').textContent = '📄 RETRY';
+                    $('generateBtn').className = 'btn-generate';
+                    $('generateBtn').disabled = false;
+                    $('connectionStatus').textContent = '❌ Payment Failed';
+                    showToast('❌ Payment failed. Please try again.', 'error');
+                    return;
+                }
+
+                if (attempts >= maxAttempts) {
+                    clearInterval(paymentCheckInterval);
+                    paymentCheckInterval = null;
+                    $('generateBtn').textContent = '📄 CHECK STATUS';
+                    $('generateBtn').className = 'btn-generate';
+                    $('generateBtn').disabled = false;
+                    $('connectionStatus').textContent = '⏳ Timeout';
+                    showToast('⏳ Payment still processing. Check dashboard.', '');
+                }
+            } catch (error) {
+                console.error('Polling error:', error);
+            }
+        }, 3000);
+    }
 
     // ============================================================
     // COPY INVOICE ID

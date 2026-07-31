@@ -13,6 +13,7 @@ const sqlite3 = require('sqlite3').verbose();
 
 // ----- Initialize Express app -----
 const app = express();
+app.use(express.json());
 const PORT = process.env.PORT || 5000;
 
 // ----- Import after app initialization -----
@@ -30,7 +31,6 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 async function setupDatabase() {
     const dbPath = process.env.DATABASE_PATH || './database/receipts.db';
     
-    // Ensure database directory exists
     const dbDir = path.dirname(dbPath);
     if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
@@ -40,7 +40,6 @@ async function setupDatabase() {
     
     return new Promise((resolve, reject) => {
         db.serialize(() => {
-            // Create payers table
             db.run(`
                 CREATE TABLE IF NOT EXISTS payers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +56,6 @@ async function setupDatabase() {
                 else console.log('✅ payers table ready');
             });
 
-            // Create receipts table
             db.run(`
                 CREATE TABLE IF NOT EXISTS receipts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,7 +80,6 @@ async function setupDatabase() {
                 else console.log('✅ receipts table ready');
             });
 
-            // Create indexes
             db.run(`CREATE INDEX IF NOT EXISTS idx_receipts_payment_id ON receipts(pinch_payment_id)`);
             db.run(`CREATE INDEX IF NOT EXISTS idx_receipts_email ON receipts(customer_email)`);
             db.run(`CREATE INDEX IF NOT EXISTS idx_payers_email ON payers(email)`);
@@ -229,24 +226,7 @@ app.use('/receipts', express.static(receiptsDir));
 
 // ----- Home -----
 app.get('/', (req, res) => {
-    res.json({
-        name: 'Pinch Receipt App',
-        status: 'running',
-        version: '2.0.0',
-        endpoints: [
-            'GET / — API status',
-            'GET /receipts/dashboard — Dashboard',
-            'GET /receipts — All receipts (JSON)',
-            'GET /stats — Stats',
-            'POST /test-payment — Test payment',
-            'POST /webhooks/pinch — Webhook',
-            'GET /stripe/invoice/:invoiceId — Fetch Stripe invoice',
-            'POST /eftpos-generate — Generate QR invoice',
-            'POST /process-stripe-invoice — Process invoice to receipt',
-            'GET /demo.html — Customer app',
-            'GET /eftpos.html — EFTPOS simulator'
-        ]
-    });
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ----- Get all receipts -----
@@ -349,45 +329,14 @@ app.get('/stats', async (req, res) => {
 // STRIPE ROUTES
 // ============================================================
 
-// ----- Fetch Stripe invoice -----
 app.get('/stripe/invoice/:invoiceId', async (req, res) => {
     try {
         const invoiceId = req.params.invoiceId;
-        console.log('🔄 Fetching Stripe invoice:', invoiceId);
-
         const invoice = await stripe.invoices.retrieve(invoiceId);
         const lineItems = await stripe.invoices.listLineItems(invoiceId, { limit: 100 });
-
-        res.json({
-            success: true,
-            invoice_id: invoiceId,
-            invoice: invoice,
-            line_items: lineItems.data,
-            total: invoice.total,
-            currency: invoice.currency,
-            number: invoice.number,
-            customer_name: invoice.customer_name,
-            customer_email: invoice.customer_email,
-            status: invoice.status,
-            created: invoice.created,
-            metadata: invoice.metadata
-        });
+        res.json({ success: true, invoice, line_items: lineItems.data });
     } catch (error) {
-        console.error('❌ Error fetching Stripe invoice:', error);
-        res.status(404).json({
-            success: false,
-            error: error.message || 'Invoice not found'
-        });
-    }
-});
-
-// ----- Process Stripe invoice to receipt -----
-app.post('/process-stripe-invoice', async (req, res) => {
-    try {
-        const result = await handlePaymentCreated(req.body);
-        res.json({ success: true, message: 'Receipt generated', result });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(404).json({ error: error.message || 'Invoice not found' });
     }
 });
 
@@ -398,8 +347,6 @@ app.post('/process-stripe-invoice', async (req, res) => {
 app.post('/eftpos-generate', async (req, res) => {
     try {
         const { storeName, storeEmail, staffName, staffPhone, invoiceNumber, reference, items, subtotal, gstAmount, total, gstRate } = req.body;
-
-        console.log('📄 QR Generation:', storeName, invoiceNumber, (total / 100).toFixed(2));
 
         const customer = await stripe.customers.create({
             email: storeEmail || 'store@example.com',
@@ -421,198 +368,409 @@ app.post('/eftpos-generate', async (req, res) => {
             currency: 'aud',
             collection_method: 'send_invoice',
             days_until_due: 30,
-            metadata: {
-                store_name: storeName,
-                staff_name: staffName,
-                invoice_number: invoiceNumber,
-                reference: reference || '',
-                gst_rate: String(gstRate || 10)
-            }
+            metadata: { store_name: storeName, staff_name: staffName, invoice_number: invoiceNumber, reference: reference || '', gst_rate: String(gstRate || 10) }
         });
 
         const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+        res.json({ success: true, invoice_id: finalizedInvoice.id, invoice_number: finalizedInvoice.number || invoiceNumber, total: finalizedInvoice.total, currency: finalizedInvoice.currency, customer_id: customer.id });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================================
+// CREATE PINCH PAYMENT LINK
+// ============================================================
+
+app.post('/create-payment', async (req, res) => {
+    try {
+        const { storeName, invoiceNumber, total, items } = req.body;
+
+        const amountInCents = Math.round(total || 0);
+        if (amountInCents < 100) {
+            return res.status(400).json({ success: false, error: 'Amount must be at least $1.00 (100 cents)' });
+        }
+
+        const token = await getPinchToken();
+
+        const payerEmail = `payer_${Date.now()}@example.com`;
+        const payerResponse = await fetch(`${PINCH_API_URL}payers`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'pinch-version': '2020.1' },
+            body: JSON.stringify({ emailAddress: payerEmail, firstName: 'Customer', lastName: String(Date.now()) })
+        });
+
+        const payerData = await payerResponse.json();
+        if (!payerResponse.ok) {
+            return res.status(500).json({ success: false, error: 'Payer creation failed: ' + JSON.stringify(payerData) });
+        }
+
+        const payerId = payerData.id;
+        const invoiceRef = invoiceNumber || `INV-${Date.now()}`;
+        const requestBody = {
+            payerId: payerId,
+            amount: amountInCents,
+            currency: 'AUD',
+            reference: invoiceRef,
+            description: `Payment for ${storeName || 'Store'} - Invoice ${invoiceRef}`,
+            allowedPaymentMethods: ['credit-card']
+        };
+
+        const paymentLinkResponse = await fetch(`${PINCH_API_URL}payment-links`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/json', 'pinch-version': '2020.1' },
+            body: JSON.stringify(requestBody)
+        });
+
+        const paymentLinkData = await paymentLinkResponse.json();
+        if (!paymentLinkResponse.ok) {
+            return res.status(500).json({ success: false, error: paymentLinkData });
+        }
 
         res.json({
             success: true,
-            invoice_id: finalizedInvoice.id,
-            invoice_number: finalizedInvoice.number || invoiceNumber,
-            total: finalizedInvoice.total,
-            currency: finalizedInvoice.currency,
-            customer_id: customer.id,
-            store_name: storeName,
-            staff_name: staffName,
-            invoice_number_display: invoiceNumber
+            paymentLinkId: paymentLinkData.id,
+            checkoutUrl: paymentLinkData.url || paymentLinkData.checkoutUrl,
+            payerId: payerId,
+            total: amountInCents,
+            invoiceNumber: invoiceRef,
+            storeName: storeName
         });
 
     } catch (error) {
-        console.error('❌ QR generation failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
 // ============================================================
-// TEST PAYMENT WITH PINCH
+// CHECK PAYMENT STATUS — SINGLE VERSION
 // ============================================================
 
-app.post('/test-payment', async (req, res) => {
+
+// ============================================================
+// CHECK PAYMENT STATUS — IMPROVED
+// ============================================================
+
+app.get('/check-payment/:paymentLinkId', async (req, res) => {
     try {
-        const { email, firstName, lastName, amount, reference, items } = req.body;
+        const { paymentLinkId } = req.params;
+        console.log(`🔍 Checking payment status for: ${paymentLinkId}`);
 
-        console.log('💳 Test payment request:', { email, firstName, lastName, amount, reference });
-
-        // Step 1: Create Payer in Pinch
-        const payer = await createPinchPayer(email || 'customer@example.com', firstName || 'Customer', lastName || 'User');
-        console.log('✅ Pinch Payer created:', payer.id);
-
-        // Step 2: Process payment with Pinch
         const token = await getPinchToken();
-        const paymentAmount = amount || 1000;
-        const paymentReference = reference || `INV-${Date.now()}`;
-        const testToken = process.env.PINCH_TEST_TOKEN || 'tkn_test_000000000000000000000000000';
 
-        // Try to create a source first
-        try {
-            const sourceResponse = await fetch(`${PINCH_API_URL}sources`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                    'pinch-version': '2020.1'
-                },
-                body: JSON.stringify({
-                    payerId: payer.id,
-                    token: testToken,
-                    isDefault: true
-                })
-            });
-            if (sourceResponse.ok) {
-                const sourceData = await sourceResponse.json();
-                console.log('✅ Source created:', sourceData.id);
-            }
-        } catch (e) {
-            console.log('⚠️ Source creation skipped:', e.message);
-        }
-
-        // Process payment with Pinch
-        const paymentResponse = await fetch(`${PINCH_API_URL}payments/realtime`, {
-            method: 'POST',
+        // Step 1: Get the payment link details
+        const linkResponse = await fetch(`${PINCH_API_URL}payment-links/${paymentLinkId}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'pinch-version': '2020.1'
-            },
-            body: JSON.stringify({
-                payerId: payer.id,
-                amount: paymentAmount,
-                currency: 'AUD',
-                reference: paymentReference,
-                description: `Payment for ${reference || 'invoice'}`,
-                token: testToken
-            })
+            }
         });
 
-        const paymentData = await paymentResponse.json();
+        const linkData = await linkResponse.json();
 
-        if (!paymentResponse.ok) {
-            console.error('❌ Pinch payment failed:', paymentData);
-            // Fallback: save receipt anyway
-            const receiptData = {
-                id: `pmt_${Date.now()}`,
-                payerId: payer.id,
-                amount: paymentAmount,
-                currency: 'AUD',
-                reference: paymentReference,
-                payer: {
-                    emailAddress: email || 'customer@example.com',
-                    firstName: firstName || 'Customer',
-                    lastName: lastName || 'User'
-                },
-                receipt_text: `Payment processed\nAmount: AUD $${(paymentAmount / 100).toFixed(2)}\nReference: ${paymentReference}`,
-                store_name: 'Store',
-                staff_name: 'Staff',
-                invoice_number: paymentReference
-            };
-            const result = await handlePaymentCreated(receiptData);
-            return res.json({
-                success: true,
-                message: 'Payment recorded',
-                payment: { id: receiptData.id, amount: paymentAmount },
-                payer: payer,
-                receipt_url: `/receipts/dashboard`,
-                result: result
+        if (!linkResponse.ok) {
+            console.error('❌ Failed to fetch payment link:', linkData);
+            return res.status(500).json({
+                success: false,
+                error: linkData.message || 'Failed to fetch payment status'
             });
         }
 
-        console.log('✅ Pinch payment processed:', paymentData.id);
+        let paymentStatus = 'pending';
+        let paymentId = null;
+        let paymentAmount = linkData.amountInCents || 0;
+        let paymentCurrency = linkData.currency || 'AUD';
 
-        // Save to database
-        const receiptData = {
-            id: paymentData.id,
-            payerId: payer.id,
-            amount: paymentData.amount || paymentAmount,
-            currency: paymentData.currency || 'AUD',
-            reference: paymentData.reference || paymentReference,
-            payer: {
-                emailAddress: payer.emailAddress || email,
-                firstName: payer.firstName || firstName,
-                lastName: payer.lastName || lastName
-            },
-            receipt_text: `PINCH PAYMENT RECEIPT\nPayment ID: ${paymentData.id}\nAmount: AUD $${((paymentData.amount || paymentAmount) / 100).toFixed(2)}\nReference: ${paymentData.reference || paymentReference}\nStatus: ${paymentData.status || 'approved'}`,
-            store_name: 'Store',
-            staff_name: 'Staff',
-            invoice_number: paymentReference,
-            line_items: items || []
-        };
+        console.log(`📥 Payment link data:`, JSON.stringify(linkData, null, 2));
 
-        const result = await handlePaymentCreated(receiptData);
+        // Step 2: Check if there are payments attached to this link
+        if (linkData.payments && linkData.payments.length > 0) {
+            // Get the most recent payment
+            const latestPayment = linkData.payments[linkData.payments.length - 1];
+            paymentId = latestPayment.id;
+            paymentStatus = latestPayment.status || 'pending';
+            
+            console.log(`📊 Found payment: ${paymentId}, status: ${paymentStatus}`);
+            
+            // Step 3: If status is still 'processing' or 'pending', try to get more details
+            if (paymentStatus === 'pending' || paymentStatus === 'processing') {
+                try {
+                    const paymentResponse = await fetch(`${PINCH_API_URL}payments/${paymentId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Accept': 'application/json',
+                            'pinch-version': '2020.1'
+                        }
+                    });
+                    
+                    const paymentData = await paymentResponse.json();
+                    
+                    if (paymentResponse.ok) {
+                        console.log(`📊 Payment details:`, JSON.stringify(paymentData, null, 2));
+                        // Check if payment has a more specific status
+                        if (paymentData.status) {
+                            paymentStatus = paymentData.status;
+                        }
+                        // Check if there are any events or transfers
+                        if (paymentData.transfers && paymentData.transfers.length > 0) {
+                            paymentStatus = 'approved';
+                        }
+                    }
+                } catch (paymentError) {
+                    console.warn('⚠️ Could not fetch payment details:', paymentError.message);
+                }
+            }
+            
+            // Step 4: Check if the payment has a successful status
+            const successStatuses = ['approved', 'succeeded', 'completed', 'captured', 'settled'];
+            if (successStatuses.includes(paymentStatus)) {
+                paymentStatus = 'approved';
+            }
+            
+            // Step 5: Check if payment is failed
+            const failedStatuses = ['failed', 'declined', 'dishonoured', 'cancelled', 'refunded'];
+            if (failedStatuses.includes(paymentStatus)) {
+                paymentStatus = 'failed';
+            }
+        } else {
+            // No payments yet - check if link has a status
+            paymentStatus = linkData.status || 'pending';
+            console.log(`📊 No payments found, link status: ${paymentStatus}`);
+        }
+
+        // Step 6: Final status
+        console.log(`📊 Final status: ${paymentStatus}, Payment ID: ${paymentId || 'none'}`);
 
         res.json({
             success: true,
-            message: 'Payment processed with Pinch',
-            payment: paymentData,
-            payer: payer,
-            receipt_url: `/receipts/dashboard`,
-            result: result
+            paymentLinkId: paymentLinkId,
+            status: paymentStatus,
+            paymentId: paymentId,
+            amount: paymentAmount,
+            currency: paymentCurrency,
+            description: linkData.description
         });
 
     } catch (error) {
-        console.error('❌ Pinch payment failed:', error.message);
-        // Fallback: save receipt anyway
-        try {
-            const fallbackData = {
-                id: `pmt_${Date.now()}`,
-                payerId: `pyr_${Date.now()}`,
-                amount: req.body?.amount || 1000,
-                currency: 'AUD',
-                reference: req.body?.reference || `INV-${Date.now()}`,
-                payer: {
-                    emailAddress: req.body?.email || 'customer@example.com',
-                    firstName: req.body?.firstName || 'Customer',
-                    lastName: req.body?.lastName || 'User'
-                },
-                receipt_text: `Payment recorded\nAmount: AUD $${((req.body?.amount || 1000) / 100).toFixed(2)}`,
-                store_name: 'Store',
-                staff_name: 'Staff',
-                invoice_number: req.body?.reference || `INV-${Date.now()}`
-            };
-            await handlePaymentCreated(fallbackData);
-            res.json({
-                success: true,
-                message: 'Payment recorded',
-                payment: { id: fallbackData.id },
-                receipt_url: `/receipts/dashboard`
-            });
-        } catch (fallbackError) {
-            res.status(500).json({
-                success: false,
-                error: error.message || 'Payment processing failed'
-            });
-        }
+        console.error('❌ Payment status check failed:', error.message);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Payment status check failed'
+        });
     }
 });
 
 // ============================================================
-// WEBHOOKS
+// GENERATE RECEIPT FROM PAYMENT
+// ============================================================
+
+app.post('/generate-receipt-from-payment', async (req, res) => {
+    try {
+        const { paymentId } = req.body;
+        console.log('📄 Generating receipt for payment:', paymentId);
+
+        const token = await getPinchToken();
+        
+        // Fetch payment details from Pinch
+        const paymentResponse = await fetch(`${PINCH_API_URL}payments/${paymentId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json',
+                'pinch-version': '2020.1'
+            }
+        });
+
+        const paymentData = await paymentResponse.json();
+        
+        if (!paymentResponse.ok) {
+            throw new Error(paymentData.message || 'Failed to fetch payment details');
+        }
+
+        console.log('📊 Payment data:', JSON.stringify(paymentData, null, 2));
+
+        // Build receipt data
+        const receiptData = {
+            id: paymentData.id,
+            payerId: paymentData.payerId,
+            amount: paymentData.amount,
+            currency: paymentData.currency || 'AUD',
+            reference: paymentData.reference || `INV-${Date.now()}`,
+            payer: {
+                emailAddress: paymentData.payer?.emailAddress || 'customer@example.com',
+                firstName: paymentData.payer?.firstName || 'Customer',
+                lastName: paymentData.payer?.lastName || 'User'
+            },
+            receipt_text: `PINCH PAYMENT RECEIPT\nPayment ID: ${paymentData.id}\nAmount: $${(paymentData.amount / 100).toFixed(2)}\nStatus: ${paymentData.status}`,
+            store_name: paymentData.metadata?.store_name || 'Store',
+            staff_name: paymentData.metadata?.staff_name || 'Staff',
+            invoice_number: paymentData.reference || 'N/A',
+            line_items: paymentData.metadata?.items ? JSON.parse(paymentData.metadata.items) : []
+        };
+
+        // Save to database
+        await db.saveReceiptFromWebhook(receiptData);
+        
+        // Generate PDF
+        const { generateReceipt } = require('./services/pdfGenerator');
+        const pdfResult = await generateReceipt(receiptData);
+        await db.updateReceiptWithPdf(paymentData.id, pdfResult.filePath, pdfResult.pdfUrl);
+
+        console.log('✅ Receipt generated for:', paymentData.id);
+
+        res.json({
+            success: true,
+            message: 'Receipt generated successfully',
+            receipt: receiptData,
+            pdfUrl: pdfResult.pdfUrl
+        });
+
+    } catch (error) {
+        console.error('❌ Receipt generation failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+
+
+app.post('/simulate-payment', async (req, res) => {
+    try {
+        const { storeName, invoiceNumber, total, items, payerId } = req.body;
+
+        const fakePaymentId = `pmt_sim_${Date.now()}`;
+        const amountInCents = Math.round(total || 5500);
+
+        // ✅ Ensure we have a payer ID
+        const payerIdToUse = payerId || `pyr_sim_${Date.now()}`;
+
+        const receiptData = {
+            id: fakePaymentId,
+            payerId: payerIdToUse,
+            amount: amountInCents,
+            currency: 'AUD',
+            reference: invoiceNumber || `INV-${Date.now()}`,
+            payer: {
+                emailAddress: 'customer@example.com',
+                firstName: 'Customer',
+                lastName: 'User'
+            },
+            receipt_text: `SIMULATED PAYMENT\nPayment ID: ${fakePaymentId}\nAmount: $${(amountInCents / 100).toFixed(2)}\nReference: ${invoiceNumber || 'N/A'}`,
+            store_name: storeName || 'Store',
+            staff_name: 'Staff',
+            invoice_number: invoiceNumber || 'N/A',
+            line_items: items || []
+        };
+
+        await db.saveReceiptFromWebhook(receiptData);
+        // ... rest of code
+    } catch (error) {
+        // ...
+    }
+});
+
+
+
+
+
+// ============================================================
+// TEST WEBHOOK
+// ============================================================
+
+app.post('/test-webhook', async (req, res) => {
+    try {
+        const mockData = req.body || {
+            type: 'payment.succeeded',
+            data: {
+                id: `pmt_test_${Date.now()}`,
+                payerId: `pyr_test_${Date.now()}`,
+                amount: 5500,
+                currency: 'AUD',
+                reference: 'INV-TEST-001',
+                status: 'approved',
+                payer: { emailAddress: 'test@example.com', firstName: 'Test', lastName: 'User' },
+                metadata: { store_name: 'Bunnings Warehouse', staff_name: 'John Smith', items: JSON.stringify([{ description: 'Hammer', amount: 2500, quantity: 1 }, { description: 'Paint', amount: 1000, quantity: 2 }]) }
+            }
+        };
+
+        const paymentData = mockData.data;
+        const receiptData = {
+            id: paymentData.id,
+            payerId: paymentData.payerId,
+            amount: paymentData.amount,
+            currency: paymentData.currency || 'AUD',
+            reference: paymentData.reference || 'N/A',
+            payer: { emailAddress: paymentData.payer?.emailAddress || 'test@example.com', firstName: paymentData.payer?.firstName || 'Test', lastName: paymentData.payer?.lastName || 'User' },
+            receipt_text: `TEST PAYMENT RECEIPT\nPayment ID: ${paymentData.id}\nAmount: $${(paymentData.amount / 100).toFixed(2)}`,
+            store_name: paymentData.metadata?.store_name || 'Store',
+            staff_name: paymentData.metadata?.staff_name || 'Staff',
+            invoice_number: paymentData.reference || 'N/A'
+        };
+
+        await handlePaymentCreated(receiptData);
+        const { generateReceipt } = require('./services/pdfGenerator');
+        const pdfResult = await generateReceipt(receiptData);
+        await db.updateReceiptWithPdf(paymentData.id, pdfResult.filePath, pdfResult.pdfUrl);
+
+        res.json({ success: true, message: 'Webhook test completed' });
+
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ============================================================
+// PINCH WEBHOOK
+// ============================================================
+
+app.post('/webhooks/pinch', async (req, res) => {
+    try {
+        const event = req.body;
+        console.log('📨 Webhook received:', event.type);
+
+        if (event.type === 'payment.succeeded' || event.type === 'payment-created') {
+            const paymentData = event.data;
+            const receiptData = {
+                id: paymentData.id,
+                payerId: paymentData.payerId,
+                amount: paymentData.amount,
+                currency: paymentData.currency || 'AUD',
+                reference: paymentData.reference || 'N/A',
+                payer: { emailAddress: paymentData.payer?.emailAddress || 'customer@example.com', firstName: paymentData.payer?.firstName || 'Customer', lastName: paymentData.payer?.lastName || 'User' },
+                receipt_text: `PINCH PAYMENT RECEIPT\nPayment ID: ${paymentData.id}\nAmount: $${(paymentData.amount / 100).toFixed(2)}\nReference: ${paymentData.reference || 'N/A'}\nStatus: ${paymentData.status || 'approved'}`,
+                store_name: paymentData.metadata?.store_name || 'Store',
+                staff_name: paymentData.metadata?.staff_name || 'Staff',
+                invoice_number: paymentData.reference || 'N/A',
+                line_items: paymentData.metadata?.items ? JSON.parse(paymentData.metadata.items) : []
+            };
+
+            await handlePaymentCreated(receiptData);
+            const { generateReceipt } = require('./services/pdfGenerator');
+            const pdfResult = await generateReceipt(receiptData);
+            await db.updateReceiptWithPdf(paymentData.id, pdfResult.filePath, pdfResult.pdfUrl);
+            console.log('✅ Receipt generated for:', paymentData.id);
+        }
+
+        res.status(200).json({ received: true });
+
+    } catch (error) {
+        console.error('❌ Webhook error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================================
+// SERVE PINCH PUBLISHABLE KEY
+// ============================================================
+
+app.get('/api/pinch-config', (req, res) => {
+    res.json({ publishableKey: process.env.PINCH_PUBLISHABLE_KEY || '' });
+});
+
+// ============================================================
+// WEBHOOKS ROUTER
 // ============================================================
 
 app.use('/webhooks', webhookRoutes);
